@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "Message": {
+      "title": "Message",
+      "description": "A chat message",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The text content of the message" },
+        "senderId": { "type": "string", "description": "The UID of the sender" },
+        "senderName": { "type": "string", "description": "The display name of the sender" },
+        "senderPhoto": { "type": "string", "description": "The photo URL of the sender" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent" }
+      },
+      "required": ["text", "senderId", "senderName", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A private or group chat metadata",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Group name (optional for private chats)" },
+        "type": { "type": "string", "enum": ["private", "group"], "description": "Type of chat" },
+        "members": { "type": "array", "items": { "type": "string" }, "description": "UIDs of participants" },
+        "lastMessage": { "type": "string", "description": "Snippet of last message" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last activity" }
+      },
+      "required": ["members", "updatedAt", "type"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "description": "Display name" },
+        "photoURL": { "type": "string", "description": "Avatar URL" },
+        "lastSeen": { "type": "string", "format": "date-time", "description": "Last activity" },
+        "email": { "type": "string", "description": "User email" }
+      },
+      "required": ["displayName"]
+    }
+  },
+  "firestore": {
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Global chat messages"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Private chat rooms"
+    },
+    "/chats/{chatId}/messages/{msgId}": {
+      "schema": "Message",
+      "description": "Messages within a private chat"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    }
+  }
+}

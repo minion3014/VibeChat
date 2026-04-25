@@ -1,0 +1,6 @@
+{
+  "name": "VibeChat",
+  "description": "Một ứng dụng nhắn tin thời gian thực vibrant với lịch sử trò chuyện bền vững sử dụng Firebase Firestore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
