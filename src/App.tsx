@@ -118,6 +118,7 @@ export default function App() {
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -324,6 +325,7 @@ export default function App() {
       
       setActiveChatId(chatId);
       setSearchQuery('');
+      setShowMobileSidebar(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${chatId}`);
     }
@@ -347,6 +349,7 @@ export default function App() {
       setShowCreateGroup(false);
       setGroupName('');
       setSelectedUsers([]);
+      setShowMobileSidebar(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${chatId}`);
     }
@@ -546,8 +549,8 @@ export default function App() {
       </div>
 
       {/* Sidebar: Conversations */}
-      <div className="hidden md:flex w-[320px] h-full border-r border-white/5 bg-white/[0.02] backdrop-blur-xl flex-col z-10 transition-all">
-        <div className="p-6 flex items-center justify-between">
+      <div className={`${showMobileSidebar ? 'flex' : 'hidden'} md:flex fixed md:relative inset-0 md:inset-auto w-full md:w-[320px] h-full border-r border-white/5 bg-[#020408]/95 md:bg-white/[0.02] backdrop-blur-2xl flex-col z-50 md:z-10 transition-all`}>
+        <div className="p-6 flex items-center justify-between border-b border-white/5 md:border-none">
           <div className="flex items-center gap-2 group cursor-default">
             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
               <MessageSquare className="w-5 h-5 text-white" />
@@ -556,13 +559,21 @@ export default function App() {
               Vibe<span className="text-blue-400">Chat</span>
             </h1>
           </div>
-          <button 
-            onClick={() => setShowCreateGroup(true)}
-            className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-blue-500/20 hover:border-blue-500/30 transition-all duration-300 group"
-            title="Tạo nhóm"
-          >
-            <Plus className="w-4 h-4 text-slate-400 group-hover:text-blue-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowCreateGroup(true)}
+              className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-blue-500/20 hover:border-blue-500/30 transition-all duration-300 group"
+              title="Tạo nhóm"
+            >
+              <Plus className="w-4 h-4 text-slate-400 group-hover:text-blue-400" />
+            </button>
+            <button 
+              onClick={() => setShowMobileSidebar(false)}
+              className="md:hidden w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all"
+            >
+              <X className="w-4 h-4 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}
@@ -623,7 +634,10 @@ export default function App() {
                   return (
                     <div 
                       key={c.id}
-                      onClick={() => setActiveChatId(c.id)}
+                      onClick={() => {
+                        setActiveChatId(c.id);
+                        setShowMobileSidebar(false);
+                      }}
                       className={`p-3 rounded-2xl flex items-center gap-3 transition-all cursor-pointer group border ${
                         activeChatId === c.id 
                           ? 'bg-blue-600/10 border-blue-500/20 shadow-inner' 
@@ -705,16 +719,22 @@ export default function App() {
       {/* Main Chat Area */}
       <div className="flex-1 h-full flex flex-col z-10">
         {/* Chat Header */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 bg-white/[0.01] backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-xl border border-white/10 ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
+        <header className="h-20 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-white/[0.01] backdrop-blur-md relative z-40">
+          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+            <button 
+              onClick={() => setShowMobileSidebar(true)}
+              className="md:hidden w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all shrink-0"
+            >
+              <MessageCircle className="w-5 h-5 text-blue-400" />
+            </button>
+            <div className={`p-2.5 sm:p-3 rounded-xl border border-white/10 shrink-0 ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
               {activeChat?.type === 'group' ? <Users className="w-5 h-5 text-indigo-400" /> : <MessageCircle className="w-5 h-5 text-blue-400" />}
             </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-bold tracking-tight truncate text-white">
                 {activeChat ? (activeChat.type === 'group' ? activeChat.name : (activeChatPartner?.displayName || 'Trò chuyện')) : 'VibeChat'}
               </h2>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium font-sans uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[9px] sm:text-[11px] text-slate-500 font-medium font-sans uppercase tracking-wider truncate">
                 {activeChat ? (activeChat.type === 'group' ? `${activeChat.members.length} thành viên` : (activeChatPartner?.email || 'Người dùng')) : 'Chọn một cuộc trò chuyện'}
               </div>
             </div>
@@ -768,14 +788,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="p-2 space-y-1">
-                          <button 
-                            onClick={() => clearHistory(true)}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-white/5 rounded-xl transition-all text-sm group"
-                          >
-                            <MessageCircle className="w-4 h-4 text-slate-500 group-hover:text-blue-400" />
-                            <span className="font-medium">Xóa lịch sử tin nhắn</span>
-                          </button>
+                        <div className="p-2">
                           <button 
                             onClick={deleteChat}
                             className="w-full flex items-center gap-3 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-all text-sm group"
@@ -796,15 +809,9 @@ export default function App() {
         {/* Message History */}
         <div 
           ref={scrollRef}
-          className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto bg-gradient-to-b from-transparent to-blue-900/5 scroll-smooth"
+          className="flex-1 px-4 sm:px-8 py-6 space-y-6 overflow-y-auto bg-gradient-to-b from-transparent to-blue-900/5 scroll-smooth"
         >
-          <div className="flex justify-center mb-8">
-            <span className="text-[10px] text-slate-500 uppercase tracking-[0.2em] bg-white/5 px-4 py-1.5 rounded-full border border-white/5">
-              Toàn bộ lịch sử tin nhắn tại đây
-            </span>
-          </div>
-
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="w-full space-y-6">
             {!activeChatId ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-700">
                 <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-4 border border-white/5">
@@ -829,26 +836,26 @@ export default function App() {
         </div>
 
         {/* Message Input */}
-        <div className="p-6 md:p-8 bg-white/[0.02] border-t border-white/5 backdrop-blur-xl">
+        <div className="p-4 sm:p-6 md:p-8 bg-white/[0.02] border-t border-white/5 backdrop-blur-xl">
           <form 
             onSubmit={sendMessage}
-            className="max-w-4xl mx-auto relative flex items-center gap-4"
+            className="w-full max-w-4xl mx-auto relative flex items-center gap-2 sm:gap-4"
           >
-            <div className="flex-1 relative">
+            <div className="flex-1 min-w-0 relative">
               <input 
                 type="text" 
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder={activeChatId ? "Nhập tin nhắn..." : "Vui lòng chọn chat"}
                 disabled={!activeChatId}
-                className="w-full h-12 bg-white/5 border border-white/10 rounded-2xl px-6 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-slate-200 placeholder:text-slate-600 disabled:opacity-40"
+                className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl px-6 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-slate-200 placeholder:text-slate-600 disabled:opacity-40 backdrop-blur-md shadow-inner"
               />
             </div>
             
             <button 
               type="submit"
               disabled={!newMessage.trim() || sending || !activeChatId}
-              className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 hover:bg-blue-500 disabled:bg-slate-800 disabled:opacity-50 transition-all flex-shrink-0 group active:scale-90"
+              className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 disabled:bg-slate-800 disabled:opacity-50 transition-all flex-shrink-0 group active:scale-95 border-t border-white/20"
             >
               {sending ? (
                 <Loader2 className="w-5 h-5 animate-spin text-white" />
@@ -929,7 +936,7 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`flex items-end gap-3 max-w-[85%] sm:max-w-[70%] group ${isMe ? 'ml-auto flex-row-reverse' : 'flex-row'}`}
+      className={`flex items-end gap-2.5 max-w-[85%] sm:max-w-[70%] group ${isMe ? 'ml-auto flex-row-reverse' : 'flex-row'}`}
     >
       <div className="flex-shrink-0 mb-1">
         {message.senderPhoto ? (
@@ -950,12 +957,12 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
         
         <div className="relative group">
           <div className={`
-            p-4 rounded-2xl shadow-xl transition-all
+            p-4 rounded-2xl shadow-xl transition-all relative
             ${isMe 
-              ? 'bg-blue-600/90 backdrop-blur-md text-white rounded-br-none border border-blue-500/20' 
-              : 'bg-white/[0.05] border border-white/10 text-slate-200 rounded-bl-none'}
+              ? 'bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 shadow-blue-500/20 text-white rounded-br-none border-t border-white/20' 
+              : 'bg-white/[0.03] backdrop-blur-xl border border-white/10 text-slate-200 rounded-bl-none shadow-black/20'}
           `}>
-            <p className="text-[15px] leading-relaxed break-words whitespace-pre-line">{message.text}</p>
+            <p className="text-[15px] leading-relaxed break-all whitespace-pre-line">{message.text}</p>
             
             <div className={`
               flex items-center gap-1.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity
