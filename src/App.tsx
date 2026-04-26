@@ -31,7 +31,7 @@ import {
   writeBatch
 } from './lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2 } from 'lucide-react';
+import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu } from 'lucide-react';
 import { format } from 'date-fns';
 
 // --- Types ---
@@ -725,7 +725,7 @@ export default function App() {
               onClick={() => setShowMobileSidebar(true)}
               className="md:hidden w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all shrink-0"
             >
-              <MessageCircle className="w-5 h-5 text-blue-400" />
+              <Menu className="w-5 h-5 text-blue-400" />
             </button>
             <div className={`p-2.5 sm:p-3 rounded-xl border border-white/10 shrink-0 ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
               {activeChat?.type === 'group' ? <Users className="w-5 h-5 text-indigo-400" /> : <MessageCircle className="w-5 h-5 text-blue-400" />}
