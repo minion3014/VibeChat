@@ -541,7 +541,7 @@ export default function App() {
   }
 
   return (
-    <div className="w-full h-screen bg-[#020408] text-slate-100 flex overflow-hidden font-sans relative">
+    <div className="w-full h-[100dvh] bg-[#020408] text-slate-100 flex overflow-hidden font-sans relative">
       {/* Background Atmosphere */}
       <div className="absolute inset-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]"></div>
@@ -717,7 +717,7 @@ export default function App() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 h-full flex flex-col z-10">
+      <div className="flex-1 h-full min-h-0 flex flex-col z-10">
         {/* Chat Header */}
         <header className="h-20 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-white/[0.01] backdrop-blur-md relative z-40">
           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
@@ -809,7 +809,7 @@ export default function App() {
         {/* Message History */}
         <div 
           ref={scrollRef}
-          className="flex-1 px-4 sm:px-8 py-6 space-y-6 overflow-y-auto bg-gradient-to-b from-transparent to-blue-900/5 scroll-smooth"
+          className="flex-1 min-h-0 px-4 sm:px-8 py-6 space-y-6 overflow-y-auto bg-gradient-to-b from-transparent to-blue-900/5 scroll-smooth"
         >
           <div className="w-full space-y-6">
             {!activeChatId ? (
