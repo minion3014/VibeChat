@@ -850,8 +850,28 @@ export default function App() {
             >
               <Menu className="w-5 h-5 text-blue-400" />
             </button>
-            <div className={`p-2.5 sm:p-3 rounded-xl border border-white/10 shrink-0 ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
-              {activeChat?.type === 'group' ? <Users className="w-5 h-5 text-indigo-400" /> : <MessageCircle className="w-5 h-5 text-blue-400" />}
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-white/10 shrink-0 flex items-center justify-center overflow-hidden transition-all ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
+              {activeChat ? (
+                activeChat.type === 'group' ? (
+                  <Users className="w-5 h-5 text-indigo-400" />
+                ) : (
+                  activeChatPartner?.photoURL ? (
+                    <img src={activeChatPartner.photoURL} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs uppercase">
+                      {activeChatPartner?.displayName?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
+                    </div>
+                  )
+                )
+              ) : (
+                user?.photoURL ? (
+                  <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-white/5 flex items-center justify-center text-slate-400 font-bold text-xs uppercase">
+                    {user?.displayName?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
+                  </div>
+                )
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-lg font-bold tracking-tight truncate text-white">
