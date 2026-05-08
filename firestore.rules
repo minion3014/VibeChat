@@ -24,6 +24,10 @@ service cloud.firestore {
     }
 
     // --- Validation Helpers ---
+    function isVerified() {
+      return isSignedIn();
+    }
+
     function isValidUser(data) {
       return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
         && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 500))
@@ -37,6 +41,12 @@ service cloud.firestore {
         && data.senderName is string && data.senderName.size() > 0
         && (data.senderPhoto == null || (data.senderPhoto is string && data.senderPhoto.size() <= 500))
         && data.createdAt == request.time;
+    }
+
+    function isValidMessageDeletion(data) {
+      return data.text == 'Tin nhắn này đã xóa'
+        && data.isDeleted == true
+        && data.updatedAt == request.time;
     }
 
     function isValidChat(data) {
@@ -55,42 +65,50 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn();
-      allow create: if isSignedIn() && userId == request.auth.uid && isValidUser(incoming());
-      allow update: if isSignedIn() && userId == request.auth.uid && isValidUser(incoming())
+      allow create: if isVerified() && userId == request.auth.uid && isValidUser(incoming());
+      allow update: if isVerified() && userId == request.auth.uid && isValidUser(incoming())
                     && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastSeen', 'email']);
     }
 
     // Chats: Rooms
     match /chats/{chatId} {
       allow read: if isSignedIn() && resource.data.members.hasAny([request.auth.uid]);
-      allow create: if isSignedIn() && isValidChat(incoming());
-      allow update: if isSignedIn() && existing().members.hasAny([request.auth.uid]) 
+      allow create: if isVerified() && isValidChat(incoming());
+      allow update: if isVerified() && existing().members.hasAny([request.auth.uid]) 
                     && (
                       (isValidChat(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt', 'name', 'type', 'members', 'lastReadAt']))
                       || 
                       (incoming().diff(existing()).affectedKeys().hasOnly(['lastReadAt']) && incoming().lastReadAt is map)
                     );
-      allow delete: if isSignedIn() && existing().members.hasAny([request.auth.uid]);
+      allow delete: if isVerified() && existing().members.hasAny([request.auth.uid]);
       
       // Messages within a chat
       match /messages/{msgId} {
         allow read: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
-        allow create: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
+        allow create: if isVerified() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
                       && isValidMessage(incoming());
-        allow delete: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+        allow update: if isVerified() 
+                      && existing().senderId == request.auth.uid
+                      && !existing().get('isDeleted', false)
+                      && isValidMessageDeletion(incoming())
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt']);
+        allow delete: if isVerified() && existing().senderId == request.auth.uid;
       }
     }
 
     // Messages: Global Chat stream
     match /messages/{messageId} {
       // Secure List Queries
-      allow list: if isSignedIn(); // Note: Ideally restricted by room, but this is a global chat.
+      allow list: if isSignedIn();
       allow get: if isSignedIn();
 
-      allow create: if isSignedIn() && isValidMessage(incoming());
-      
-      // Messages are typically immutable in simple chats, but let's allow deletion by author
-      allow delete: if isSignedIn() && existing().senderId == request.auth.uid;
+      allow create: if isVerified() && isValidMessage(incoming());
+      allow update: if isVerified() 
+                    && existing().senderId == request.auth.uid
+                    && !existing().get('isDeleted', false)
+                    && isValidMessageDeletion(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt']);
+      allow delete: if isVerified() && existing().senderId == request.auth.uid;
     }
   }
 }

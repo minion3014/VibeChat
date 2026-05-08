@@ -28,10 +28,13 @@ import {
   Timestamp,
   deleteDoc,
   getDocs,
-  writeBatch
+  writeBatch,
+  updateDoc,
+  arrayRemove,
+  arrayUnion
 } from './lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu } from 'lucide-react';
+import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 
 // --- Types ---
@@ -42,6 +45,7 @@ interface Message {
   senderName: string;
   senderPhoto?: string;
   createdAt: Timestamp | null;
+  isDeleted?: boolean;
 }
 
 interface Chat {
@@ -116,9 +120,26 @@ export default function App() {
   // Group creation state
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [groupName, setGroupName] = useState('');
+  const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -221,6 +242,32 @@ export default function App() {
 
     markAsRead();
   }, [user, activeChatId]);
+
+  // --- Click Outside Handler ---
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Handle Chat Menu
+      if (showChatMenu && chatMenuRef.current && !chatMenuRef.current.contains(event.target as Node)) {
+        setShowChatMenu(false);
+      }
+      // Handle Search Dropdown
+      if (searchQuery && searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setSearchQuery('');
+      }
+      // Handle Mobile Sidebar
+      if (showMobileSidebar && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        // Only auto-hide sidebar if it's currently displayed in mobile mode (not desktop always-on)
+        if (window.innerWidth < 768) {
+          setShowMobileSidebar(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showChatMenu, showMobileSidebar]);
 
   // --- Auto Scroll ---
   useEffect(() => {
@@ -356,23 +403,60 @@ export default function App() {
   };
 
   const deleteChat = async () => {
-    if (!activeChatId) return;
-    if (!window.confirm('Bạn có chắc chắn muốn xóa cuộc trò chuyện này và toàn bộ lịch sử tin nhắn?')) return;
+    if (!activeChatId || !user) return;
+    
+    const isGroup = activeChat?.type === 'group';
 
-    try {
-      await clearHistory(false);
-      await deleteDoc(doc(db, 'chats', activeChatId));
-      setActiveChatId(null);
-      setShowChatMenu(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId}`);
-    }
+    setConfirmModal({
+      show: true,
+      title: isGroup ? 'Rời khỏi nhóm' : 'Xóa cuộc trò chuyện',
+      message: isGroup 
+        ? 'Bạn có chắc chắn muốn rời khỏi nhóm này?' 
+        : 'Bạn có chắc chắn muốn xóa cuộc trò chuyện này và toàn bộ lịch sử tin nhắn?',
+      onConfirm: async () => {
+        try {
+          if (isGroup) {
+            // Logic for group: Just remove the user from members list
+            await updateDoc(doc(db, 'chats', activeChatId), {
+              members: arrayRemove(user.uid)
+            });
+          } else {
+            // Logic for private chat: Delete the whole document
+            await clearHistory(false);
+            await deleteDoc(doc(db, 'chats', activeChatId));
+          }
+          
+          setActiveChatId(null);
+          setShowChatMenu(false);
+          setConfirmModal(prev => ({ ...prev, show: false }));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId}`);
+        }
+      }
+    });
   };
 
   const clearHistory = async (showConfirm = true) => {
     if (!activeChatId) return;
-    if (showConfirm && !window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tin nhắn trong cuộc trò chuyện này?')) return;
 
+    if (showConfirm) {
+      setConfirmModal({
+        show: true,
+        title: 'Xóa lịch sử tin nhắn',
+        message: 'Bạn có chắc chắn muốn xóa tất cả lịch sử tin nhắn trong cuộc trò chuyện này?',
+        onConfirm: async () => {
+          await executeClearHistory();
+          setConfirmModal(prev => ({ ...prev, show: false }));
+        }
+      });
+      return;
+    }
+
+    await executeClearHistory();
+  };
+
+  const executeClearHistory = async () => {
+    if (!activeChatId) return;
     try {
       const messagesRef = collection(db, 'chats', activeChatId, 'messages');
       const messagesSnapshot = await getDocs(messagesRef);
@@ -396,7 +480,7 @@ export default function App() {
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      if (showConfirm) setShowChatMenu(false);
+      setShowChatMenu(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId}/messages`);
     }
@@ -405,12 +489,24 @@ export default function App() {
   const deleteMessage = async (messageId: string) => {
     if (!activeChatId) return;
     
-    try {
-      const msgRef = doc(db, 'chats', activeChatId, 'messages', messageId);
-      await deleteDoc(msgRef);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId}/messages/${messageId}`);
-    }
+    setConfirmModal({
+      show: true,
+      title: 'Xóa tin nhắn',
+      message: 'Bạn có chắc chắn muốn xóa tin nhắn này không?',
+      onConfirm: async () => {
+        try {
+          const msgRef = doc(db, 'chats', activeChatId, 'messages', messageId);
+          await setDoc(msgRef, {
+            text: 'Tin nhắn này đã xóa',
+            isDeleted: true,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+          setConfirmModal(prev => ({ ...prev, show: false }));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `chats/${activeChatId}/messages/${messageId}`);
+        }
+      }
+    });
   };
 
   const toggleUserSelection = (uid: string) => {
@@ -422,11 +518,27 @@ export default function App() {
   // --- Filtering ---
   const myUsers = allUsers.filter(u => u.id !== user?.uid);
   const filteredUsers = searchQuery.trim() 
-    ? myUsers.filter(u => 
-        u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? myUsers.filter(u => {
+        const query = searchQuery.toLowerCase();
+        const emailLocalPart = u.email?.split('@')[0].toLowerCase() || '';
+        return (
+          u.displayName?.toLowerCase().includes(query) || 
+          emailLocalPart.includes(query)
+        );
+      })
     : [];
+
+  // Filter users for group creation based on search query
+  const filteredGroupUsers = groupSearchQuery.trim() === '' 
+    ? [] 
+    : myUsers.filter(u => {
+        const query = groupSearchQuery.toLowerCase();
+        const emailLocalPart = u.email?.split('@')[0].toLowerCase() || '';
+        return (
+          u.displayName?.toLowerCase().includes(query) || 
+          emailLocalPart.includes(query)
+        );
+      });
 
   const activeChat = myChats.find(c => c.id === activeChatId);
   const activeChatPartner = activeChat?.type === 'private' 
@@ -549,7 +661,10 @@ export default function App() {
       </div>
 
       {/* Sidebar: Conversations */}
-      <div className={`${showMobileSidebar ? 'flex' : 'hidden'} md:flex fixed md:relative inset-0 md:inset-auto w-full md:w-[320px] h-full border-r border-white/5 bg-[#020408]/95 md:bg-white/[0.02] backdrop-blur-2xl flex-col z-50 md:z-10 transition-all`}>
+      <div 
+        ref={sidebarRef}
+        className={`${showMobileSidebar ? 'flex' : 'hidden'} md:flex fixed md:relative inset-0 md:inset-auto w-[280px] sm:w-[320px] md:w-[320px] h-full border-r border-white/5 bg-[#020408]/95 md:bg-white/[0.02] backdrop-blur-2xl flex-col z-50 md:z-10 transition-all shadow-2xl md:shadow-none`}
+      >
         <div className="p-6 flex items-center justify-between border-b border-white/5 md:border-none">
           <div className="flex items-center gap-2 group cursor-default">
             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
@@ -577,7 +692,7 @@ export default function App() {
         </div>
 
         {/* Search Bar */}
-        <div className="px-4 mb-4">
+        <div className="px-4 mb-4 relative" ref={searchRef}>
           <div className="relative">
             <input 
               type="text" 
@@ -587,39 +702,49 @@ export default function App() {
               className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-white"
             />
           </div>
+
+          {/* Search Results Dropdown */}
+          <AnimatePresence>
+            {searchQuery.trim() !== '' && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute top-full left-4 right-4 mt-2 bg-[#0d1117] border border-white/10 rounded-2xl shadow-2xl z-[60] overflow-hidden max-h-[400px] flex flex-col"
+              >
+                <div className="py-2 px-4 text-[10px] uppercase font-bold text-blue-400 tracking-widest border-b border-white/5 bg-white/[0.02]">Kết quả tìm kiếm</div>
+                <div className="overflow-y-auto custom-scrollbar p-2 space-y-1">
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map(u => (
+                      <div 
+                        key={u.id}
+                        onClick={() => startPrivateChat(u)}
+                        className="p-3 hover:bg-blue-600/10 rounded-xl flex items-center gap-3 cursor-pointer group transition-all border border-transparent hover:border-blue-500/20"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/5 overflow-hidden shrink-0">
+                          {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className="text-sm font-semibold truncate group-hover:text-blue-400">{u.displayName}</p>
+                          <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-slate-600">Không tìm thấy người dùng phù hợp</div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Chat List & Search Results */}
+        {/* Chat List */}
         <div className="flex-1 space-y-1 px-2 overflow-y-auto custom-scrollbar">
-          {searchQuery.trim() !== '' ? (
-            <>
-              <div className="py-2 px-4 text-[10px] uppercase font-bold text-blue-400 tracking-widest">Kết quả tìm kiếm</div>
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map(u => (
-                  <div 
-                    key={u.id}
-                    onClick={() => startPrivateChat(u)}
-                    className="p-3 hover:bg-blue-600/10 rounded-2xl flex items-center gap-3 cursor-pointer group transition-all border border-transparent hover:border-blue-500/20"
-                  >
-                    <div className="w-11 h-11 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/5 overflow-hidden">
-                      {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <p className="text-sm font-semibold truncate group-hover:text-blue-400">{u.displayName}</p>
-                      <p className="text-xs text-slate-500 truncate">{u.email}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-xs text-slate-600">Không tìm thấy người dùng phù hợp</div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="py-2 px-4 text-[10px] uppercase font-bold text-slate-600 tracking-widest font-sans">Cuộc trò chuyện</div>
-              
-              {myChats.length > 0 ? (
-                myChats.map((c) => {
+          <div className="py-2 px-4 text-[10px] uppercase font-bold text-slate-600 tracking-widest font-sans">Cuộc trò chuyện</div>
+          
+          {myChats.length > 0 ? (
+            myChats.map((c) => {
                   const isGroup = c.type === 'group';
                   const partnerId = c.members.find(m => m !== user?.uid);
                   const partner = !isGroup ? allUsers.find(u => u.id === partnerId) : null;
@@ -687,8 +812,6 @@ export default function App() {
                   <p className="text-[10px] text-slate-700">Hãy tìm kiếm bạn bè để bắt đầu</p>
                 </div>
               )}
-            </>
-          )}
         </div>
         
         {/* Profile */}
@@ -740,7 +863,7 @@ export default function App() {
             </div>
           </div>
           
-          <div className="flex gap-4 relative">
+          <div className="flex gap-4 relative" ref={chatMenuRef}>
             {activeChatId && (
               <>
                 <button 
@@ -749,21 +872,15 @@ export default function App() {
                 >
                   <MoreVertical className="w-5 h-5" />
                 </button>
-
                 <AnimatePresence>
                   {showChatMenu && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-40" 
-                        onClick={() => setShowChatMenu(false)}
-                      />
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                        className="absolute right-0 top-12 w-64 bg-[#0a0d14] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
-                      >
-                        <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                      className="absolute right-0 top-12 w-64 bg-[#0a0d14] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                    >
+                      <div className="p-4 border-b border-white/5 bg-white/[0.02]">
                           <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-3">Thông tin</p>
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20 font-bold overflow-hidden shrink-0">
@@ -788,17 +905,40 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="p-2">
+                        <div className="p-2 space-y-1">
+                          {activeChat?.type === 'group' && (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  setShowMembersModal(true);
+                                  setShowChatMenu(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-white/5 rounded-xl transition-all text-sm group"
+                              >
+                                <Users className="w-4 h-4 text-blue-400" />
+                                <span className="font-medium">Xem thành viên</span>
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setShowAddMemberModal(true);
+                                  setShowChatMenu(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-white/5 rounded-xl transition-all text-sm group"
+                              >
+                                <UserPlus className="w-4 h-4 text-indigo-400" />
+                                <span className="font-medium">Thêm thành viên</span>
+                              </button>
+                            </>
+                          )}
                           <button 
                             onClick={deleteChat}
                             className="w-full flex items-center gap-3 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-all text-sm group"
                           >
                             <Trash2 className="w-4 h-4" />
-                            <span className="font-medium">Xóa cuộc trò chuyện</span>
+                            <span className="font-medium">{activeChat?.type === 'group' ? 'Rời khỏi nhóm' : 'Xóa cuộc trò chuyện'}</span>
                           </button>
                         </div>
                       </motion.div>
-                    </>
                   )}
                 </AnimatePresence>
               </>
@@ -894,21 +1034,60 @@ export default function App() {
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-600 tracking-widest block mb-2">Thành viên ({selectedUsers.length})</label>
-                  <div className="max-h-[200px] overflow-y-auto custom-scrollbar space-y-2">
-                    {myUsers.map(u => (
-                      <div 
-                        key={u.id}
-                        onClick={() => toggleUserSelection(u.id)}
-                        className={`p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all ${selectedUsers.includes(u.id) ? 'bg-blue-600/10 border border-blue-500/20' : 'bg-white/5 border border-transparent hover:border-white/10'}`}
-                      >
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold font-sans">
-                          {u.displayName?.substring(0, 2).toUpperCase()}
-                        </div>
-                        <span className="text-xs font-medium flex-1">{u.displayName}</span>
-                        {selectedUsers.includes(u.id) && <div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]"></div>}
-                      </div>
-                    ))}
+                  
+                  <div className="mb-4">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="Tìm bạn bè để thêm..." 
+                        value={groupSearchQuery}
+                        onChange={(e) => setGroupSearchQuery(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-4 text-xs focus:outline-none focus:border-blue-500/50 text-white transition-all"
+                      />
+                    </div>
                   </div>
+
+                  <div className="max-h-[200px] overflow-y-auto custom-scrollbar space-y-2">
+                    {filteredGroupUsers.length > 0 ? (
+                      filteredGroupUsers.map(u => (
+                        <div 
+                          key={u.id}
+                          onClick={() => toggleUserSelection(u.id)}
+                          className={`p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all ${selectedUsers.includes(u.id) ? 'bg-blue-600/10 border border-blue-500/20' : 'bg-white/5 border border-transparent hover:border-white/10'}`}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold font-sans overflow-hidden">
+                            {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="flex-1 overflow-hidden">
+                            <p className="text-xs font-medium truncate">{u.displayName}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
+                          </div>
+                          {selectedUsers.includes(u.id) && <div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]"></div>}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-slate-600 text-[10px] font-bold uppercase tracking-wider">
+                        {groupSearchQuery.trim() !== '' ? 'Không tìm thấy người dùng' : 'Hãy tìm kiếm thành viên'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hiển thị danh sách đã chọn */}
+                  {selectedUsers.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedUsers.map(uid => {
+                        const u = allUsers.find(user => user.id === uid);
+                        return (
+                          <div key={uid} className="flex items-center gap-2 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[10px] font-bold text-blue-400">
+                            {u?.displayName}
+                            <button onClick={(e) => { e.stopPropagation(); toggleUserSelection(uid); }} className="hover:text-white">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="p-6 bg-white/[0.01] border-t border-white/5">
@@ -924,13 +1103,296 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Members Modal */}
+      <MembersModal 
+        show={showMembersModal}
+        onClose={() => setShowMembersModal(false)}
+        members={activeChat?.members || []}
+        allUsers={allUsers}
+        currentUserId={user.uid}
+        onStartChat={startPrivateChat}
+      />
+
+      {/* Add Member Modal */}
+      <AddMemberModal 
+        show={showAddMemberModal}
+        onClose={() => setShowAddMemberModal(false)}
+        currentMembers={activeChat?.members || []}
+        allUsers={allUsers}
+        onAddMembers={async (uids) => {
+          if (!activeChatId) return;
+          try {
+            await updateDoc(doc(db, 'chats', activeChatId), {
+              members: arrayUnion(...uids)
+            });
+            setShowAddMemberModal(false);
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, `chats/${activeChatId}`);
+          }
+        }}
+      />
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModal.show && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#0a0d14] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+                <h3 className="text-lg font-bold mb-2 text-white">{confirmModal.title}</h3>
+                <p className="text-sm text-slate-400 mb-6">{confirmModal.message}</p>
+                
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all"
+                  >
+                    Hủy
+                  </button>
+                  <button 
+                    onClick={confirmModal.onConfirm}
+                    className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-red-600/20"
+                  >
+                    Xác nhận
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function MessageBubble({ message, currentUserId, onDelete }: { message: Message, currentUserId: string, onDelete: (id: string) => void }) {
+interface MembersModalProps {
+  show: boolean;
+  onClose: () => void;
+  members: string[];
+  allUsers: any[];
+  currentUserId: string;
+  onStartChat: (user: any) => void;
+}
+
+function MembersModal({ show, onClose, members, allUsers, currentUserId, onStartChat }: MembersModalProps) {
+  const groupMembers = allUsers.filter(u => members.includes(u.id));
+
+  return (
+    <AnimatePresence>
+      {show && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="bg-[#0a0d14] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+          >
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <h3 className="text-lg font-bold">Thành viên nhóm</h3>
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+              {groupMembers.map((member) => (
+                <div 
+                  key={member.id}
+                  className="p-3 flex items-center gap-3 group transition-all"
+                >
+                  <div 
+                    onClick={() => {
+                      if (member.id !== currentUserId) {
+                        onStartChat(member);
+                        onClose();
+                      }
+                    }}
+                    className={`w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/10 overflow-hidden shrink-0 ${member.id !== currentUserId ? 'cursor-pointer hover:border-blue-500/50 hover:ring-2 hover:ring-blue-500/20 transition-all' : ''}`}
+                  >
+                    {member.photoURL ? (
+                      <img src={member.photoURL} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      member.displayName?.substring(0, 2).toUpperCase()
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-sm font-semibold truncate text-white">
+                      {member.displayName} {member.id === currentUserId && <span className="text-[10px] text-blue-400 ml-1 font-bold">(Bạn)</span>}
+                    </p>
+                    <p className="text-[10px] text-slate-500 truncate">{member.email}</p>
+                  </div>
+
+                  {member.id !== currentUserId && (
+                    <button 
+                      onClick={() => {
+                        onStartChat(member);
+                        onClose();
+                      }}
+                      className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                      title="Nhắn tin riêng"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+interface AddMemberModalProps {
+  show: boolean;
+  onClose: () => void;
+  currentMembers: string[];
+  allUsers: any[];
+  onAddMembers: (uids: string[]) => Promise<void>;
+}
+
+function AddMemberModal({ show, onClose, currentMembers, allUsers, onAddMembers }: AddMemberModalProps) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const availableUsers = searchQuery.trim() === '' ? [] : allUsers.filter(u => {
+    const query = searchQuery.toLowerCase();
+    const emailLocalPart = u.email?.split('@')[0].toLowerCase() || '';
+    return (
+      !currentMembers.includes(u.id) && 
+      (u.displayName?.toLowerCase().includes(query) || emailLocalPart.includes(query))
+    );
+  });
+
+  const toggle = (uid: string) => {
+    setSelected(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  };
+
+  const handleAdd = async () => {
+    if (selected.length === 0) return;
+    setLoading(true);
+    await onAddMembers(selected);
+    setLoading(false);
+    setSelected([]);
+    setSearchQuery('');
+  };
+
+  return (
+    <AnimatePresence>
+      {show && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="bg-[#0a0d14] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+          >
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <h3 className="text-lg font-bold">Thêm thành viên</h3>
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="px-6 py-4 border-b border-white/5">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Tìm thành viên..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600 text-white"
+                />
+              </div>
+
+              {/* Hiển thị danh sách đã chọn */}
+              {selected.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selected.map(uid => {
+                    const u = allUsers.find(user => user.id === uid);
+                    return (
+                      <div key={uid} className="flex items-center gap-2 px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-[10px] font-bold text-indigo-400">
+                        {u?.displayName}
+                        <button onClick={() => toggle(uid)} className="hover:text-white">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 max-h-[300px] overflow-y-auto custom-scrollbar space-y-2">
+              {availableUsers.length > 0 ? (
+                availableUsers.map((u) => (
+                  <div 
+                    key={u.id}
+                    onClick={() => toggle(u.id)}
+                    className={`p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all border ${selected.includes(u.id) ? 'bg-indigo-600/10 border-indigo-500/20' : 'bg-white/5 border-transparent hover:border-white/10'}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/10 overflow-hidden shrink-0">
+                      {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-sm font-semibold truncate">{u.displayName}</p>
+                      <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
+                    </div>
+                    {selected.includes(u.id) && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>}
+                  </div>
+                ))
+              ) : (
+                <p className="text-center py-8 text-xs text-slate-600">
+                  {searchQuery ? 'Không tìm thấy người dùng' : 'Hãy tìm kiếm thành viên để thêm vào nhóm'}
+                </p>
+              )}
+            </div>
+
+            <div className="p-6 bg-white/[0.01] border-t border-white/5">
+              <button 
+                onClick={handleAdd}
+                disabled={selected.length === 0 || loading}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Thêm {selected.length} thành viên</>}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+interface MessageBubbleProps {
+  key?: React.Key;
+  message: Message;
+  currentUserId: string;
+  onDelete: (id: string) => Promise<void> | void;
+}
+
+function MessageBubble({ message, currentUserId, onDelete }: MessageBubbleProps) {
   const isMe = message.senderId === currentUserId;
   const time = message.createdAt ? format(message.createdAt.toDate(), 'HH:mm') : '';
+  const isDeleted = message.isDeleted === true;
 
   return (
     <motion.div
@@ -940,9 +1402,9 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
     >
       <div className="flex-shrink-0 mb-1">
         {message.senderPhoto ? (
-          <img src={message.senderPhoto} alt="" className="w-8 h-8 rounded-full shadow-lg border border-white/10" />
+          <img src={message.senderPhoto} alt="" className={`w-8 h-8 rounded-full shadow-lg border border-white/10 ${isDeleted ? 'opacity-40 grayscale' : ''}`} />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 text-[10px]">
+          <div className={`w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 text-[10px] ${isDeleted ? 'opacity-40' : ''}`}>
             {message.senderName.substring(0, 2).toUpperCase()}
           </div>
         )}
@@ -959,10 +1421,16 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
           <div className={`
             p-4 rounded-2xl shadow-xl transition-all relative
             ${isMe 
-              ? 'bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 shadow-blue-500/20 text-white rounded-br-none border-t border-white/20' 
-              : 'bg-white/[0.03] backdrop-blur-xl border border-white/10 text-slate-200 rounded-bl-none shadow-black/20'}
+              ? isDeleted 
+                ? 'bg-white/[0.03] border border-white/5 text-slate-500 rounded-br-none italic'
+                : 'bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 shadow-blue-500/20 text-white rounded-br-none border-t border-white/20' 
+              : isDeleted
+                ? 'bg-white/[0.02] border border-white/5 text-slate-600 rounded-bl-none italic'
+                : 'bg-white/[0.03] backdrop-blur-xl border border-white/10 text-slate-200 rounded-bl-none shadow-black/20'}
           `}>
-            <p className="text-[15px] leading-relaxed break-all whitespace-pre-line">{message.text}</p>
+            <p className={`text-[15px] leading-relaxed break-all whitespace-pre-line ${isDeleted ? 'text-sm' : ''}`}>
+              {isDeleted ? 'Tin nhắn này đã xóa' : message.text}
+            </p>
             
             <div className={`
               flex items-center gap-1.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity
@@ -971,7 +1439,7 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
               <span className="text-[9px] uppercase font-bold tracking-tighter">
                 {time}
               </span>
-              {isMe && (
+              {isMe && !isDeleted && (
                 <svg className="w-3 h-3 text-blue-200" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path>
                 </svg>
@@ -979,7 +1447,7 @@ function MessageBubble({ message, currentUserId, onDelete }: { message: Message,
             </div>
           </div>
 
-          {isMe && (
+          {isMe && !isDeleted && (
             <button
               onClick={() => onDelete(message.id)}
               className="absolute -left-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all duration-200"
