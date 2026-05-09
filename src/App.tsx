@@ -7,8 +7,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   db, 
   auth, 
-  googleProvider, 
-  signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
   User as AuthUser,
@@ -117,6 +115,7 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -124,6 +123,7 @@ export default function App() {
 
   // Chat/Search State
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [myChats, setMyChats] = useState<Chat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,6 +166,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setIsAdmin(currentUser?.email === 'minion3014@gmail.com');
       setLoading(false);
 
       if (currentUser) {
@@ -308,22 +309,16 @@ export default function App() {
   }, [messages]);
 
   // --- Actions ---
-  const handleGoogleLogin = async () => {
-    setAuthLoading(true);
-    setAuthError('');
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error: any) {
-      setAuthError(error.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
+
+    if (isRegistering && password !== confirmPassword) {
+      setAuthError('Mật khẩu nhập lại không khớp');
+      setAuthLoading(false);
+      return;
+    }
 
     try {
       if (isRegistering) {
@@ -615,6 +610,48 @@ export default function App() {
     }
   };
 
+  const clearAllAppMetadata = async () => {
+    if (!isAdmin) return;
+    
+    setConfirmModal({
+      show: true,
+      title: 'DỌN DẸP TOÀN BỘ HỆ THỐNG',
+      message: 'CẢNH BÁO: Hành động này sẽ xóa VĨNH VIỄN tất cả các cuộc trò chuyện và tin nhắn trên toàn bộ hệ thống. Bạn có chắc chắn muốn tiếp tục?',
+      onConfirm: async () => {
+        try {
+          // 1. Get all chats
+          const chatsSnapshot = await getDocs(collection(db, 'chats'));
+          
+          for (const chatDoc of chatsSnapshot.docs) {
+            // 2. Get all messages in each chat
+            const messagesSnapshot = await getDocs(collection(db, 'chats', chatDoc.id, 'messages'));
+            let batch = writeBatch(db);
+            let count = 0;
+            for (const mDoc of messagesSnapshot.docs) {
+              batch.delete(mDoc.ref);
+              count++;
+              if (count === 500) {
+                await batch.commit();
+                batch = writeBatch(db);
+                count = 0;
+              }
+            }
+            if (count > 0) await batch.commit();
+            
+            // 3. Delete the chat document itself
+            await deleteDoc(chatDoc.ref);
+          }
+          
+          setActiveChatId(null);
+          setConfirmModal(prev => ({ ...prev, show: false }));
+          alert('Đã dọn dẹp toàn bộ dữ liệu thành công.');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, 'all_data');
+        }
+      }
+    });
+  };
+
   const deleteMessage = async (messageId: string) => {
     if (!activeChatId) return;
     
@@ -751,6 +788,26 @@ export default function App() {
               </button>
             </div>
 
+            {isRegistering && (
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Nhập lại mật khẩu"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/5 rounded-lg text-slate-500 hover:text-slate-300 transition-all"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+
             {authError && <p className="text-red-400 text-xs mt-2">{authError}</p>}
 
             <button
@@ -762,27 +819,13 @@ export default function App() {
             </button>
           </form>
 
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-1 h-px bg-white/10"></div>
-            <span className="text-slate-500 text-xs uppercase tracking-widest font-bold">Hoặc</span>
-            <div className="flex-1 h-px bg-white/10"></div>
-          </div>
-
-          <button
-            onClick={handleGoogleLogin}
-            disabled={authLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-white font-medium mb-6 disabled:opacity-50"
-          >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            Google
-          </button>
-
           <p className="text-slate-400 text-sm">
             {isRegistering ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'} {' '}
             <button 
               onClick={() => {
                 setIsRegistering(!isRegistering);
                 setAuthError('');
+                setConfirmPassword('');
               }}
               className="text-blue-400 hover:underline font-medium"
             >
@@ -996,6 +1039,15 @@ export default function App() {
             <p className="text-sm font-semibold truncate hover:text-blue-400 transition-colors">{currentUserData?.displayName || user.displayName}</p>
             <p className="text-[10px] text-green-400 uppercase tracking-widest font-bold">Online</p>
           </div>
+          {isAdmin && (
+            <button
+              onClick={clearAllAppMetadata}
+              className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all mr-1"
+              title="Dọn dẹp hệ thống"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={handleLogout}
             className="p-2 text-slate-600 hover:text-red-400 hover:bg-white/5 rounded-xl transition-all"

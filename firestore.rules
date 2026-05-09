@@ -24,6 +24,10 @@ service cloud.firestore {
     }
 
     // --- Validation Helpers ---
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'minion3014@gmail.com';
+    }
+
     function isVerified() {
       return isSignedIn();
     }
@@ -74,31 +78,33 @@ service cloud.firestore {
 
     // Chats: Rooms
     match /chats/{chatId} {
-      allow get: if isSignedIn() && isValidId(chatId) && resource.data.members.hasAny([request.auth.uid]);
-      allow list: if isSignedIn() && resource.data.members.hasAny([request.auth.uid]);
+      allow read: if isSignedIn() && isValidId(chatId) && (isAdmin() || resource.data.members.hasAny([request.auth.uid]));
+      allow list: if isSignedIn() && (isAdmin() || resource.data.members.hasAny([request.auth.uid]));
       allow create: if isVerified() && isValidId(chatId) && isValidChat(incoming()) && incoming().members.hasAll([request.auth.uid]);
-      allow update: if isVerified() && isValidId(chatId) && existing().members.hasAny([request.auth.uid]) 
+      allow update: if isVerified() && isValidId(chatId) && (isAdmin() || existing().members.hasAny([request.auth.uid])) 
                     && (
+                      isAdmin()
+                      ||
                       // Standard update (messaging or settings)
                       (isValidChat(incoming()) && (incoming().members.hasAll([request.auth.uid]) || incoming().members.size() < existing().members.size()) && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt', 'name', 'type', 'members', 'lastReadAt', 'photoURL']))
                       || 
                       // Reader update (mark as read)
                       (incoming().diff(existing()).affectedKeys().hasOnly(['lastReadAt']) && incoming().lastReadAt is map)
                     );
-      allow delete: if isVerified() && isValidId(chatId) && existing().members.hasAny([request.auth.uid]);
+      allow delete: if isVerified() && isValidId(chatId) && (isAdmin() || existing().members.hasAny([request.auth.uid]));
       
       // Messages within a chat
       match /messages/{msgId} {
-        allow get: if isSignedIn() && isValidId(msgId) && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
-        allow list: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
-        allow create: if isVerified() && isValidId(msgId) && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
+        allow get: if isSignedIn() && isValidId(msgId) && (isAdmin() || get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]));
+        allow list: if isSignedIn() && (isAdmin() || get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]));
+        allow create: if isVerified() && isValidId(msgId) && (isAdmin() || get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]))
                       && isValidMessage(incoming());
         allow update: if isVerified() && isValidId(msgId)
-                      && existing().senderId == request.auth.uid
+                      && (isAdmin() || (existing().senderId == request.auth.uid
                       && !existing().get('isDeleted', false)
                       && isValidMessageDeletion(incoming())
-                      && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt']);
-        allow delete: if isVerified() && isValidId(msgId) && existing().senderId == request.auth.uid;
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt'])));
+        allow delete: if isVerified() && isValidId(msgId) && (isAdmin() || existing().senderId == request.auth.uid);
       }
     }
   }
