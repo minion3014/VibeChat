@@ -11,7 +11,7 @@ import {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
-  User,
+  User as AuthUser,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
@@ -23,6 +23,7 @@ import {
   onSnapshot,
   serverTimestamp,
   doc,
+  getDoc,
   setDoc,
   where,
   Timestamp,
@@ -34,7 +35,7 @@ import {
   arrayUnion
 } from './lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu, UserPlus } from 'lucide-react';
+import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu, UserPlus, Camera, Settings, Edit2, Eye, EyeOff } from 'lucide-react';
 import { format } from 'date-fns';
 
 // --- Types ---
@@ -51,11 +52,19 @@ interface Message {
 interface Chat {
   id: string;
   name?: string;
+  photoURL?: string;
   type: 'private' | 'group';
   members: string[];
   lastMessage?: string;
   updatedAt: Timestamp | null;
   lastReadAt?: { [uid: string]: Timestamp };
+}
+
+interface User {
+  id: string;
+  displayName: string;
+  photoURL?: string;
+  email?: string;
 }
 
 enum OperationType {
@@ -97,7 +106,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -108,6 +117,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -123,9 +133,17 @@ export default function App() {
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [showChatMenu, setShowChatMenu] = useState(false);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(true);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showGroupSettingsModal, setShowGroupSettingsModal] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupPhoto, setEditGroupPhoto] = useState('');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
   const chatMenuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -153,12 +171,24 @@ export default function App() {
         // Sync user profile to Firestore
         const userRef = doc(db, 'users', currentUser.uid);
         try {
-          await setDoc(userRef, {
-            displayName: currentUser.displayName || 'Anonymous',
-            email: currentUser.email || '',
-            photoURL: currentUser.photoURL || '',
+          const userDoc = await getDoc(userRef);
+          const userData = userDoc.data();
+          
+          const profileUpdates: any = {
+            displayName: currentUser.displayName || userData?.displayName || 'Anonymous',
+            email: currentUser.email || userData?.email || '',
             lastSeen: serverTimestamp()
-          }, { merge: true });
+          };
+
+          // Only sync photoURL from auth if it's not empty, 
+          // or if firestore doesn't have one yet.
+          if (currentUser.photoURL) {
+            profileUpdates.photoURL = currentUser.photoURL;
+          } else if (!userData?.photoURL) {
+            profileUpdates.photoURL = '';
+          }
+
+          await setDoc(userRef, profileUpdates, { merge: true });
         } catch (error) {
           handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`);
         }
@@ -320,8 +350,74 @@ export default function App() {
       await signOut(auth);
       setMessages([]);
       setActiveChatId(null);
+      setPassword('');
+      setIsRegistering(false);
     } catch (error: any) {
       console.error("Logout Error:", error.message);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!user || !profileName.trim()) return;
+    setIsUpdatingProfile(true);
+    try {
+      // Firebase Auth photoURL has a limit (around 2048 characters).
+      // Data URLs (base64) are often much longer. We skip updating Auth photoURL if it's a long string,
+      // but we still update Firestore which supports larger strings.
+      const isPhotoTooLongForAuth = profilePhoto && profilePhoto.length > 2000;
+      
+      await updateProfile(user, {
+        displayName: profileName,
+        photoURL: isPhotoTooLongForAuth ? (user.photoURL || '') : profilePhoto
+      });
+      
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        displayName: profileName,
+        photoURL: profilePhoto,
+        updatedAt: serverTimestamp()
+      });
+      
+      setShowProfileModal(false);
+    } catch (error: any) {
+      console.error("Profile Update Error:", error.message);
+      setAuthError(error.message);
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'user' | 'group') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (type === 'user') {
+          setProfilePhoto(reader.result as string);
+        } else {
+          setEditGroupPhoto(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!activeChat || !editGroupName.trim()) return;
+    setIsUpdatingGroup(true);
+    try {
+      const chatRef = doc(db, 'chats', activeChat.id);
+      await updateDoc(chatRef, {
+        name: editGroupName,
+        photoURL: editGroupPhoto,
+        updatedAt: serverTimestamp()
+      });
+      setShowGroupSettingsModal(false);
+    } catch (error: any) {
+      console.error("Group Update Error:", error.message);
+      setAuthError(error.message);
+    } finally {
+      setIsUpdatingGroup(false);
     }
   };
 
@@ -516,6 +612,7 @@ export default function App() {
   };
 
   // --- Filtering ---
+  const currentUserData = allUsers.find(u => u.id === user?.uid);
   const myUsers = allUsers.filter(u => u.id !== user?.uid);
   const filteredUsers = searchQuery.trim() 
     ? myUsers.filter(u => {
@@ -567,12 +664,17 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md p-8 bg-white/[0.02] backdrop-blur-3xl rounded-3xl shadow-2xl border border-white/5 text-center z-10"
         >
-          <div className="mb-6 p-5 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl inline-block shadow-2xl shadow-blue-500/20">
-            <MessageSquare className="w-10 h-10 text-white" />
+          <div className="flex items-center justify-center gap-3 mb-8 group relative">
+            {/* Subtle background glow */}
+            <div className="absolute inset-0 bg-blue-600/10 blur-3xl rounded-full -z-10 group-hover:bg-blue-600/20 transition-colors duration-500"></div>
+            
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-2xl shadow-blue-500/30 group-hover:scale-105 transition-transform duration-500 shrink-0">
+              <MessageCircle className="w-7 h-7 text-white fill-white" />
+            </div>
+            <h1 className="text-4xl font-black tracking-tight text-white uppercase">
+              VIBECHAT
+            </h1>
           </div>
-          <h1 className="text-4xl font-black tracking-tight mb-2 text-white">
-            Vibe<span className="text-blue-500">Chat</span>
-          </h1>
           <p className="text-slate-400 mb-8 text-sm">{isRegistering ? 'Tạo tài khoản mới' : 'Đăng nhập để tiếp tục'}</p>
           
           <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
@@ -600,13 +702,20 @@ export default function App() {
             </div>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Mật khẩu"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/5 rounded-lg text-slate-500 hover:text-slate-300 transition-all"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
             {authError && <p className="text-red-400 text-xs mt-2">{authError}</p>}
@@ -666,12 +775,15 @@ export default function App() {
         className={`${showMobileSidebar ? 'flex' : 'hidden'} md:flex fixed md:relative inset-0 md:inset-auto w-[280px] sm:w-[320px] md:w-[320px] h-full border-r border-white/5 bg-[#020408]/95 md:bg-white/[0.02] backdrop-blur-2xl flex-col z-50 md:z-10 transition-all shadow-2xl md:shadow-none`}
       >
         <div className="p-6 flex items-center justify-between border-b border-white/5 md:border-none">
-          <div className="flex items-center gap-2 group cursor-default">
-            <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
-              <MessageSquare className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3 group cursor-default relative">
+            {/* Subtle sidebar logo glow */}
+            <div className="absolute -inset-2 bg-blue-600/5 blur-xl rounded-full -z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300 shrink-0">
+              <MessageCircle className="w-5 h-5 text-white fill-white" />
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
-              Vibe<span className="text-blue-400">Chat</span>
+            <h1 className="text-xl font-black tracking-tight text-white uppercase">
+              VIBECHAT
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -773,8 +885,12 @@ export default function App() {
                     >
                       <div className="relative">
                         {isGroup ? (
-                          <div className="w-11 h-11 rounded-full bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                            <Users className="w-5 h-5" />
+                          <div className="w-11 h-11 rounded-xl bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center text-indigo-400 overflow-hidden">
+                            {c.photoURL ? (
+                              <img src={c.photoURL} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Users className="w-5 h-5" />
+                            )}
                           </div>
                         ) : (
                           <div className="w-11 h-11 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/10 overflow-hidden">
@@ -816,18 +932,35 @@ export default function App() {
         
         {/* Profile */}
         <div className="p-4 border-t border-white/5 bg-white/[0.01] flex items-center gap-3">
-          <div className="relative">
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="" className="w-10 h-10 rounded-full border border-white/10" />
+          <div 
+            className="relative cursor-pointer group"
+            onClick={() => {
+              setProfileName(currentUserData?.displayName || user.displayName || '');
+              setProfilePhoto(currentUserData?.photoURL || user.photoURL || '');
+              setShowProfileModal(true);
+            }}
+          >
+            {(currentUserData?.photoURL || user.photoURL) ? (
+              <img src={currentUserData?.photoURL || user.photoURL} alt="" className="w-10 h-10 rounded-xl border border-white/10 object-cover group-hover:opacity-50 transition-opacity" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-blue-400">
-                {user.displayName?.substring(0, 1).toUpperCase()}
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xs font-bold text-blue-400 group-hover:bg-white/20 transition-all">
+                {(currentUserData?.displayName || user.displayName)?.substring(0, 1).toUpperCase()}
               </div>
             )}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Settings className="w-4 h-4 text-white" />
+            </div>
             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#020408]"></div>
           </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-semibold truncate">{user.displayName}</p>
+          <div 
+            className="flex-1 overflow-hidden cursor-pointer"
+            onClick={() => {
+              setProfileName(currentUserData?.displayName || user.displayName || '');
+              setProfilePhoto(currentUserData?.photoURL || user.photoURL || '');
+              setShowProfileModal(true);
+            }}
+          >
+            <p className="text-sm font-semibold truncate hover:text-blue-400 transition-colors">{currentUserData?.displayName || user.displayName}</p>
             <p className="text-[10px] text-green-400 uppercase tracking-widest font-bold">Online</p>
           </div>
           <button
@@ -853,7 +986,13 @@ export default function App() {
             <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-white/10 shrink-0 flex items-center justify-center overflow-hidden transition-all ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
               {activeChat ? (
                 activeChat.type === 'group' ? (
-                  <Users className="w-5 h-5 text-indigo-400" />
+                  activeChat.photoURL ? (
+                    <img src={activeChat.photoURL} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
+                      {activeChat.name.substring(0, 2)}
+                    </div>
+                  )
                 ) : (
                   activeChatPartner?.photoURL ? (
                     <img src={activeChatPartner.photoURL} alt="" className="w-full h-full object-cover" />
@@ -864,11 +1003,11 @@ export default function App() {
                   )
                 )
               ) : (
-                user?.photoURL ? (
-                  <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                (currentUserData?.photoURL || user?.photoURL) ? (
+                  <img src={currentUserData?.photoURL || user?.photoURL} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-white/5 flex items-center justify-center text-slate-400 font-bold text-xs uppercase">
-                    {user?.displayName?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
+                    {(currentUserData?.displayName || user?.displayName)?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
                   </div>
                 )
               )}
@@ -905,7 +1044,11 @@ export default function App() {
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20 font-bold overflow-hidden shrink-0">
                               {activeChat?.type === 'group' ? (
-                                <Users className="w-5 h-5" />
+                                activeChat.photoURL ? (
+                                  <img src={activeChat.photoURL} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <Users className="w-5 h-5" />
+                                )
                               ) : (
                                 activeChatPartner?.photoURL ? (
                                   <img src={activeChatPartner.photoURL} className="w-full h-full object-cover" alt="" />
@@ -930,12 +1073,24 @@ export default function App() {
                             <>
                               <button 
                                 onClick={() => {
+                                  setEditGroupName(activeChat.name);
+                                  setEditGroupPhoto(activeChat.photoURL || '');
+                                  setShowGroupSettingsModal(true);
+                                  setShowChatMenu(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-white/5 rounded-xl transition-all text-sm group"
+                              >
+                                <Settings className="w-4 h-4 text-blue-400" />
+                                <span className="font-medium">Cài đặt nhóm</span>
+                              </button>
+                              <button 
+                                onClick={() => {
                                   setShowMembersModal(true);
                                   setShowChatMenu(false);
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-white/5 rounded-xl transition-all text-sm group"
                               >
-                                <Users className="w-4 h-4 text-blue-400" />
+                                <Users className="w-4 h-4 text-indigo-400" />
                                 <span className="font-medium">Xem thành viên</span>
                               </button>
                               <button 
@@ -988,7 +1143,7 @@ export default function App() {
             ) : (
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} currentUserId={user.uid} onDelete={deleteMessage} />
+                  <MessageBubble key={msg.id} message={msg} currentUserId={user.uid} onDelete={deleteMessage} allUsers={allUsers} />
                 ))}
               </AnimatePresence>
             )}
@@ -1152,6 +1307,145 @@ export default function App() {
           }
         }}
       />
+
+      {/* Profile Settings Modal */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[#0a0d14] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                <h3 className="text-lg font-bold">Cài đặt hồ sơ</h3>
+                <button onClick={() => setShowProfileModal(false)} className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-all">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-8 space-y-8 flex flex-col items-center">
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-3xl overflow-hidden border-2 border-white/10 shadow-2xl relative">
+                    {profilePhoto ? (
+                      <img src={profilePhoto} alt="Avatar Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-white/5 flex items-center justify-center text-3xl font-bold text-slate-600">
+                        {profileName?.substring(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-blue-600 rounded-xl border border-white/20 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-all shadow-lg group-hover:scale-110">
+                    <Camera className="w-5 h-5 text-white" />
+                    <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, 'user')} />
+                  </label>
+                </div>
+
+                <div className="w-full space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Tên hiển thị</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white placeholder:text-slate-600"
+                        placeholder="Nhập tên của bạn..."
+                      />
+                      <Edit2 className="w-4 h-4 text-slate-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex flex-col gap-3">
+                    <button 
+                      onClick={handleUpdateProfile}
+                      disabled={isUpdatingProfile || !profileName.trim()}
+                      className="w-full py-4 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-2xl font-bold hover:shadow-lg hover:shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                    >
+                      {isUpdatingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Lưu thay đổi'}
+                    </button>
+                    <button 
+                      onClick={() => setShowProfileModal(false)}
+                      className="w-full py-4 bg-white/5 text-slate-400 rounded-2xl font-bold hover:bg-white/10 transition-all text-sm"
+                    >
+                      Hủy bỏ
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showGroupSettingsModal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[#0a0d14] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                <h3 className="text-lg font-bold">Cài đặt nhóm</h3>
+                <button onClick={() => setShowGroupSettingsModal(false)} className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-all">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-8 space-y-8 flex flex-col items-center">
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-3xl overflow-hidden border-2 border-white/10 shadow-2xl relative">
+                    {editGroupPhoto ? (
+                      <img src={editGroupPhoto} alt="Group Avatar Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-indigo-500/10 flex items-center justify-center text-3xl font-bold text-indigo-400">
+                        {editGroupName?.substring(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-indigo-600 rounded-xl border border-white/20 flex items-center justify-center cursor-pointer hover:bg-indigo-500 transition-all shadow-lg group-hover:scale-110">
+                    <Camera className="w-5 h-5 text-white" />
+                    <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, 'group')} />
+                  </label>
+                </div>
+
+                <div className="w-full space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Tên nhóm</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={editGroupName}
+                        onChange={(e) => setEditGroupName(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-sm focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-600"
+                        placeholder="Nhập tên nhóm..."
+                      />
+                      <Edit2 className="w-4 h-4 text-slate-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex flex-col gap-3">
+                    <button 
+                      onClick={handleUpdateGroup}
+                      disabled={isUpdatingGroup || !editGroupName.trim()}
+                      className="w-full py-4 bg-gradient-to-tr from-indigo-600 to-purple-600 text-white rounded-2xl font-bold hover:shadow-lg hover:shadow-indigo-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                    >
+                      {isUpdatingGroup ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Lưu thay đổi'}
+                    </button>
+                    <button 
+                      onClick={() => setShowGroupSettingsModal(false)}
+                      className="w-full py-4 bg-white/5 text-slate-400 rounded-2xl font-bold hover:bg-white/10 transition-all text-sm"
+                    >
+                      Hủy bỏ
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Confirmation Modal */}
       <AnimatePresence>
@@ -1406,13 +1700,16 @@ interface MessageBubbleProps {
   key?: React.Key;
   message: Message;
   currentUserId: string;
+  allUsers: User[];
   onDelete: (id: string) => Promise<void> | void;
 }
 
-function MessageBubble({ message, currentUserId, onDelete }: MessageBubbleProps) {
+function MessageBubble({ message, currentUserId, onDelete, allUsers }: MessageBubbleProps) {
   const isMe = message.senderId === currentUserId;
   const time = message.createdAt ? format(message.createdAt.toDate(), 'HH:mm') : '';
   const isDeleted = message.isDeleted === true;
+  const sender = allUsers.find(u => u.id === message.senderId);
+  const avatarUrl = sender?.photoURL || message.senderPhoto;
 
   return (
     <motion.div
@@ -1421,11 +1718,11 @@ function MessageBubble({ message, currentUserId, onDelete }: MessageBubbleProps)
       className={`flex items-end gap-2.5 max-w-[85%] sm:max-w-[70%] group ${isMe ? 'ml-auto flex-row-reverse' : 'flex-row'}`}
     >
       <div className="flex-shrink-0 mb-1">
-        {message.senderPhoto ? (
-          <img src={message.senderPhoto} alt="" className={`w-8 h-8 rounded-full shadow-lg border border-white/10 ${isDeleted ? 'opacity-40 grayscale' : ''}`} />
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className={`w-8 h-8 rounded-full shadow-lg border border-white/10 object-cover ${isDeleted ? 'opacity-40 grayscale' : ''}`} />
         ) : (
           <div className={`w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 text-[10px] ${isDeleted ? 'opacity-40' : ''}`}>
-            {message.senderName.substring(0, 2).toUpperCase()}
+            {(sender?.displayName || message.senderName).substring(0, 2).toUpperCase()}
           </div>
         )}
       </div>
@@ -1433,7 +1730,7 @@ function MessageBubble({ message, currentUserId, onDelete }: MessageBubbleProps)
       <div className={`flex flex-col space-y-1 relative ${isMe ? 'items-end' : 'items-start'}`}>
         {!isMe && (
           <span className="text-[10px] font-bold text-slate-500 ml-1 uppercase tracking-wider">
-            {message.senderName}
+            {sender?.displayName || message.senderName}
           </span>
         )}
         

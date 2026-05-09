@@ -10,7 +10,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc, getDocFromServer, setDoc, Timestamp, where, deleteDoc, getDocs, writeBatch, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc, getDocFromServer, getDoc, setDoc, Timestamp, where, deleteDoc, getDocs, writeBatch, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -27,6 +27,7 @@ export {
   onSnapshot, 
   serverTimestamp, 
   doc, 
+  getDoc,
   setDoc,
   deleteDoc,
   getDocs,

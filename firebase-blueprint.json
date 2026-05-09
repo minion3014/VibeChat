@@ -19,6 +19,7 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "description": "Group name (optional for private chats)" },
+        "photoURL": { "type": "string", "description": "Group avatar URL" },
         "type": { "type": "string", "enum": ["private", "group"], "description": "Type of chat" },
         "members": { "type": "array", "items": { "type": "string" }, "description": "UIDs of participants" },
         "lastMessage": { "type": "string", "description": "Snippet of last message" },
