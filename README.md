@@ -14,8 +14,6 @@
 - Tailwind CSS
 - Framer Motion (motion/react)
 
-## Installation
-
 ### Setup environment
 1. Sao chép `.env.example` thành `.env`
 2. Điền các thông tin cấu hình Firebase từ Firebase Console
@@ -34,7 +32,7 @@ Cần cấu hình các biến sau trong tệp `.env`:
 - `VITE_FIREBASE_STORAGE_BUCKET`: Storage Bucket
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`: Messaging Sender ID
 - `VITE_FIREBASE_APP_ID`: App ID
-- `VITE_FIREBASE_DATABASE_ID`: Database ID (mặc định là `(default)`)
+- `VITE_FIREBASE_DATABASE_ID`: Database ID 
 
 ## Features
 - **Real-time Messaging**: Nhận tin nhắn tức thì bằng Firestore Snapshot
@@ -44,4 +42,4 @@ Cần cấu hình các biến sau trong tệp `.env`:
 - **UI/UX**: Giao diện hiện đại, mượt mà với Framer Motion và Tailwind CSS
 
 ## Screenshots
-![VIBECHAT UI]
+![VIBECHAT Demo](public/app_demo.jpeg)
