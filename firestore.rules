@@ -37,10 +37,11 @@ service cloud.firestore {
     }
 
     function isValidMessage(data) {
+      let isSystem = data.get('type', 'text') == 'system';
       return data.text is string && data.text.size() > 0 && data.text.size() <= 2000
-        && data.senderId == request.auth.uid
+        && (isSystem ? data.senderId == 'system' : data.senderId == request.auth.uid)
         && data.senderName is string && data.senderName.size() > 0
-        && (data.senderPhoto == null || (data.senderPhoto is string && data.senderPhoto.size() <= 1048576))
+        && (data.get('senderPhoto', null) == null || (data.senderPhoto is string && data.senderPhoto.size() <= 1048576))
         && data.createdAt == request.time;
     }
 
@@ -51,8 +52,7 @@ service cloud.firestore {
     }
 
     function isValidChat(data) {
-      return data.members is list && data.members.size() >= 2 && data.members.size() <= 20
-        && data.members.hasAny([request.auth.uid])
+      return data.members is list && data.members.size() >= 1 && data.members.size() <= 20
         && data.get('type', 'private') in ['private', 'group']
         && (data.get('name', null) == null || (data.name is string && data.name.size() <= 100))
         && (data.get('photoURL', null) == null || (data.photoURL is string && data.photoURL.size() <= 1048576))
@@ -65,7 +65,7 @@ service cloud.firestore {
 
     // Users: Profiles
     match /users/{userId} {
-      allow get: if isSignedIn();
+      allow get: if isSignedIn() && isValidId(userId);
       allow list: if isSignedIn();
       allow create: if isVerified() && userId == request.auth.uid && isValidUser(incoming());
       allow update: if isVerified() && userId == request.auth.uid && isValidUser(incoming())
@@ -74,43 +74,32 @@ service cloud.firestore {
 
     // Chats: Rooms
     match /chats/{chatId} {
-      allow read: if isSignedIn() && resource.data.members.hasAny([request.auth.uid]);
-      allow create: if isVerified() && isValidChat(incoming());
-      allow update: if isVerified() && existing().members.hasAny([request.auth.uid]) 
+      allow get: if isSignedIn() && isValidId(chatId) && resource.data.members.hasAny([request.auth.uid]);
+      allow list: if isSignedIn() && resource.data.members.hasAny([request.auth.uid]);
+      allow create: if isVerified() && isValidId(chatId) && isValidChat(incoming()) && incoming().members.hasAll([request.auth.uid]);
+      allow update: if isVerified() && isValidId(chatId) && existing().members.hasAny([request.auth.uid]) 
                     && (
-                      (isValidChat(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt', 'name', 'type', 'members', 'lastReadAt', 'photoURL']))
+                      // Standard update (messaging or settings)
+                      (isValidChat(incoming()) && (incoming().members.hasAll([request.auth.uid]) || incoming().members.size() < existing().members.size()) && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt', 'name', 'type', 'members', 'lastReadAt', 'photoURL']))
                       || 
+                      // Reader update (mark as read)
                       (incoming().diff(existing()).affectedKeys().hasOnly(['lastReadAt']) && incoming().lastReadAt is map)
                     );
-      allow delete: if isVerified() && existing().members.hasAny([request.auth.uid]);
+      allow delete: if isVerified() && isValidId(chatId) && existing().members.hasAny([request.auth.uid]);
       
       // Messages within a chat
       match /messages/{msgId} {
-        allow read: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
-        allow create: if isVerified() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
+        allow get: if isSignedIn() && isValidId(msgId) && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+        allow list: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+        allow create: if isVerified() && isValidId(msgId) && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
                       && isValidMessage(incoming());
-        allow update: if isVerified() 
+        allow update: if isVerified() && isValidId(msgId)
                       && existing().senderId == request.auth.uid
                       && !existing().get('isDeleted', false)
                       && isValidMessageDeletion(incoming())
                       && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt']);
-        allow delete: if isVerified() && existing().senderId == request.auth.uid;
+        allow delete: if isVerified() && isValidId(msgId) && existing().senderId == request.auth.uid;
       }
-    }
-
-    // Messages: Global Chat stream
-    match /messages/{messageId} {
-      // Secure List Queries
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
-
-      allow create: if isVerified() && isValidMessage(incoming());
-      allow update: if isVerified() 
-                    && existing().senderId == request.auth.uid
-                    && !existing().get('isDeleted', false)
-                    && isValidMessageDeletion(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isDeleted', 'updatedAt']);
-      allow delete: if isVerified() && existing().senderId == request.auth.uid;
     }
   }
 }

@@ -47,6 +47,7 @@ interface Message {
   senderPhoto?: string;
   createdAt: Timestamp | null;
   isDeleted?: boolean;
+  type?: 'text' | 'system';
 }
 
 interface Chat {
@@ -432,6 +433,7 @@ export default function App() {
       senderId: user.uid,
       senderName: user.displayName || 'Anonymous',
       senderPhoto: user.photoURL || '',
+      type: 'text',
       createdAt: serverTimestamp()
     };
 
@@ -450,6 +452,25 @@ export default function App() {
       handleFirestoreError(error, OperationType.CREATE, `chats/${activeChatId}/messages`);
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendSystemMessage = async (chatId: string, text: string) => {
+    try {
+      const msgRef = collection(db, 'chats', chatId, 'messages');
+      await addDoc(msgRef, {
+        text,
+        senderId: 'system',
+        senderName: 'System',
+        type: 'system',
+        createdAt: serverTimestamp()
+      });
+      await setDoc(doc(db, 'chats', chatId), {
+        lastMessage: text,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `chats/${chatId}/messages`);
     }
   };
 
@@ -488,6 +509,9 @@ export default function App() {
         type: 'group',
         updatedAt: serverTimestamp()
       });
+      
+      await sendSystemMessage(chatId, `${user.displayName || 'Người dùng'} đã tạo nhóm "${groupName.trim()}"`);
+      
       setActiveChatId(chatId);
       setShowCreateGroup(false);
       setGroupName('');
@@ -512,21 +536,30 @@ export default function App() {
       onConfirm: async () => {
         try {
           if (isGroup) {
-            // Logic for group: Just remove the user from members list
-            await updateDoc(doc(db, 'chats', activeChatId), {
-              members: arrayRemove(user.uid)
+            const chatIdToLeave = activeChatId;
+            // Clear activeChatId first to unsubscribe listeners before permissions are revoked
+            setActiveChatId(null);
+            setShowChatMenu(false);
+            
+            // Add system message while user still has permissions (using the local chatIdToLeave)
+            await sendSystemMessage(chatIdToLeave, `${user.displayName || 'Người dùng'} đã rời khỏi nhóm`);
+
+            // Then remove the user from members list
+            await updateDoc(doc(db, 'chats', chatIdToLeave), {
+              members: arrayRemove(user.uid),
+              updatedAt: serverTimestamp()
             });
           } else {
             // Logic for private chat: Delete the whole document
+            const chatIdToDelete = activeChatId;
+            setActiveChatId(null);
             await clearHistory(false);
-            await deleteDoc(doc(db, 'chats', activeChatId));
+            await deleteDoc(doc(db, 'chats', chatIdToDelete));
           }
           
-          setActiveChatId(null);
-          setShowChatMenu(false);
           setConfirmModal(prev => ({ ...prev, show: false }));
         } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId}`);
+          handleFirestoreError(error, OperationType.DELETE, `chats/${activeChatId || 'unknown'}`);
         }
       }
     });
@@ -1299,8 +1332,18 @@ export default function App() {
           if (!activeChatId) return;
           try {
             await updateDoc(doc(db, 'chats', activeChatId), {
-              members: arrayUnion(...uids)
+              members: arrayUnion(...uids),
+              updatedAt: serverTimestamp()
             });
+
+            // Add system messages for each added user
+            for (const uid of uids) {
+              const addedUser = allUsers.find(u => u.id === uid);
+              if (addedUser) {
+                await sendSystemMessage(activeChatId, `${addedUser.displayName} đã được thêm vào nhóm`);
+              }
+            }
+
             setShowAddMemberModal(false);
           } catch (error) {
             handleFirestoreError(error, OperationType.UPDATE, `chats/${activeChatId}`);
@@ -1708,8 +1751,23 @@ function MessageBubble({ message, currentUserId, onDelete, allUsers }: MessageBu
   const isMe = message.senderId === currentUserId;
   const time = message.createdAt ? format(message.createdAt.toDate(), 'HH:mm') : '';
   const isDeleted = message.isDeleted === true;
+  const isSystem = message.type === 'system';
   const sender = allUsers.find(u => u.id === message.senderId);
   const avatarUrl = sender?.photoURL || message.senderPhoto;
+
+  if (isSystem) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex justify-center w-full my-2"
+      >
+        <span className="text-[11px] font-medium text-slate-500 bg-white/5 px-4 py-1.5 rounded-full border border-white/5 uppercase tracking-wider backdrop-blur-sm">
+          {message.text}
+        </span>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
