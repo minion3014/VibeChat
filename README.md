@@ -1,20 +1,47 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# VIBECHAT 💬
 
-# Run and deploy your AI Studio app
+Ứng dụng nhắn tin thời gian thực (React + Firebase) hỗ trợ:
+- Nhắn tin tức thời (Real-time)
+- Đăng nhập Google & Email
+- Quản lý danh sách bạn bè & Profile
 
-This contains everything you need to run your app locally.
+## Demo
+[https://ais-pre-mpnvi5vumhzfu6uqatlspi-804737011583.asia-southeast1.run.app](https://ais-pre-mpnvi5vumhzfu6uqatlspi-804737011583.asia-southeast1.run.app)
 
-View your app in AI Studio: https://ai.studio/apps/9d5ecbdc-1227-42ba-b40c-8637f861404f
+## Tech stack
+- React 18 + TypeScript
+- Firebase (Firestore & Auth)
+- Tailwind CSS
+- Framer Motion (motion/react)
 
-## Run Locally
+## Installation
 
-**Prerequisites:**  Node.js
+### Setup environment
+1. Sao chép `.env.example` thành `.env`
+2. Điền các thông tin cấu hình Firebase từ Firebase Console
 
+### Start App
+```bash
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Environment Variables
+Cần cấu hình các biến sau trong tệp `.env`:
+- `VITE_FIREBASE_API_KEY`: API Key của Firebase
+- `VITE_FIREBASE_AUTH_DOMAIN`: Auth Domain
+- `VITE_FIREBASE_PROJECT_ID`: Project ID
+- `VITE_FIREBASE_STORAGE_BUCKET`: Storage Bucket
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`: Messaging Sender ID
+- `VITE_FIREBASE_APP_ID`: App ID
+- `VITE_FIREBASE_DATABASE_ID`: Database ID (mặc định là `(default)`)
+
+## Features
+- **Real-time Messaging**: Nhận tin nhắn tức thì bằng Firestore Snapshot
+- **Authentication**: Hỗ trợ đăng nhập qua Google và Email/Password
+- **Profile Management**: Cập nhật ảnh đại diện và tên hiển thị
+- **Friend Search**: Tìm kiếm người dùng và tạo cuộc trò chuyện mới
+- **UI/UX**: Giao diện hiện đại, mượt mà với Framer Motion và Tailwind CSS
+
+## Screenshots
+![VIBECHAT UI]
