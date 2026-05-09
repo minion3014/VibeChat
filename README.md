@@ -6,7 +6,7 @@
 - Quản lý danh sách bạn bè & Profile
 
 ## Demo
-[https://ais-pre-mpnvi5vumhzfu6uqatlspi-804737011583.asia-southeast1.run.app](https://ais-pre-mpnvi5vumhzfu6uqatlspi-804737011583.asia-southeast1.run.app)
+[https://vibechat-dhau.onrender.com/](https://vibechat-dhau.onrender.com/)
 
 ## Tech stack
 - React 18 + TypeScript
