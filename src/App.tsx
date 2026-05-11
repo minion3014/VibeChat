@@ -838,7 +838,7 @@ export default function App() {
   }
 
   return (
-    <div className="w-full h-[100dvh] bg-[#020408] text-slate-100 flex overflow-hidden font-sans relative">
+    <div className="fixed inset-0 bg-[#020408] text-slate-100 flex overflow-hidden font-sans">
       {/* Background Atmosphere */}
       <div className="absolute inset-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]"></div>
@@ -1058,9 +1058,9 @@ export default function App() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 h-full min-h-0 flex flex-col z-10 overflow-hidden relative">
+      <div className="flex-1 min-h-0 flex flex-col z-10 overflow-hidden relative">
         {/* Chat Header */}
-        <header className="h-20 flex-shrink-0 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-white/[0.01] backdrop-blur-md relative z-40">
+        <header className="h-20 flex-shrink-0 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-slate-900/50 backdrop-blur-md relative z-40">
           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
             <button 
               onClick={() => setShowMobileSidebar(true)}
@@ -1243,7 +1243,7 @@ export default function App() {
         </div>
 
         {/* Message Input */}
-        <div className="flex-shrink-0 p-4 sm:p-6 md:p-8 bg-white/[0.02] border-t border-white/5 backdrop-blur-xl">
+        <div className="flex-shrink-0 p-4 sm:p-6 md:p-8 bg-slate-900/50 border-t border-white/5 backdrop-blur-xl relative z-40 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6 md:pb-8">
           <form 
             onSubmit={sendMessage}
             className="w-full max-w-4xl mx-auto relative flex items-center gap-2 sm:gap-4"
