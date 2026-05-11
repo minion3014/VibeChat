@@ -34,7 +34,8 @@ import {
 } from './lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, LogOut, MessageCircle, MessageSquare, User as UserIcon, Loader2, Plus, Users, X, Info, MoreVertical, Trash2, Menu, UserPlus, Camera, Settings, Edit2, Eye, EyeOff } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 // --- Types ---
 interface Message {
@@ -64,6 +65,8 @@ interface User {
   displayName: string;
   photoURL?: string;
   email?: string;
+  isOnline?: boolean;
+  lastSeen?: Timestamp | null;
 }
 
 enum OperationType {
@@ -179,7 +182,8 @@ export default function App() {
           const profileUpdates: any = {
             displayName: currentUser.displayName || userData?.displayName || 'Anonymous',
             email: currentUser.email || userData?.email || '',
-            lastSeen: serverTimestamp()
+            lastSeen: serverTimestamp(),
+            isOnline: true
           };
 
           // Only sync photoURL from auth if it's not empty, 
@@ -197,8 +201,25 @@ export default function App() {
       }
     });
 
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      const handleOffline = () => {
+        updateDoc(userRef, { 
+          isOnline: false, 
+          lastSeen: serverTimestamp() 
+        }).catch(e => console.error(e));
+      };
+      
+      window.addEventListener('beforeunload', handleOffline);
+      return () => {
+        window.removeEventListener('beforeunload', handleOffline);
+        handleOffline();
+        unsubscribe();
+      };
+    }
+
     return () => unsubscribe();
-  }, []);
+  }, [user?.uid]);
 
   // --- Fetch Users ---
   useEffect(() => {
@@ -329,7 +350,8 @@ export default function App() {
           displayName: displayName,
           email: email,
           photoURL: '',
-          lastSeen: serverTimestamp()
+          lastSeen: serverTimestamp(),
+          isOnline: true
         }, { merge: true });
       } else {
         await signInWithEmailAndPassword(auth, email, password);
@@ -343,6 +365,13 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      if (user) {
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          isOnline: false,
+          lastSeen: serverTimestamp()
+        });
+      }
       await signOut(auth);
       setMessages([]);
       setActiveChatId(null);
@@ -909,8 +938,13 @@ export default function App() {
                         onClick={() => startPrivateChat(u)}
                         className="p-3 hover:bg-blue-600/10 rounded-xl flex items-center gap-3 cursor-pointer group transition-all border border-transparent hover:border-blue-500/20"
                       >
-                        <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/5 overflow-hidden shrink-0">
-                          {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
+                        <div className="relative shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/5 overflow-hidden">
+                            {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : u.displayName?.substring(0, 2).toUpperCase()}
+                          </div>
+                          {u.isOnline && (
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0d1117] shadow-sm"></div>
+                          )}
                         </div>
                         <div className="flex-1 overflow-hidden">
                           <p className="text-sm font-semibold truncate group-hover:text-blue-400">{u.displayName}</p>
@@ -969,13 +1003,18 @@ export default function App() {
                             )}
                           </div>
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/10 overflow-hidden">
-                            {partner?.photoURL ? (
-                              <img src={partner.photoURL} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              chatName?.substring(0, 2).toUpperCase()
+                          <>
+                            <div className="w-11 h-11 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 border border-white/10 overflow-hidden">
+                              {partner?.photoURL ? (
+                                <img src={partner.photoURL} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                chatName?.substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            {partner?.isOnline && (
+                              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#020408] shadow-lg"></div>
                             )}
-                          </div>
+                          </>
                         )}
                       </div>
                       <div className="flex-1 overflow-hidden">
@@ -1068,7 +1107,7 @@ export default function App() {
             >
               <Menu className="w-5 h-5 text-blue-400" />
             </button>
-            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-white/10 shrink-0 flex items-center justify-center overflow-hidden transition-all ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
+            <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-white/10 shrink-0 flex items-center justify-center overflow-hidden transition-all ${activeChatId ? 'bg-blue-500/10' : 'bg-white/5'}`}>
               {activeChat ? (
                 activeChat.type === 'group' ? (
                   activeChat.photoURL ? (
@@ -1079,13 +1118,15 @@ export default function App() {
                     </div>
                   )
                 ) : (
-                  activeChatPartner?.photoURL ? (
-                    <img src={activeChatPartner.photoURL} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs uppercase">
-                      {activeChatPartner?.displayName?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
-                    </div>
-                  )
+                  <>
+                    {activeChatPartner?.photoURL ? (
+                      <img src={activeChatPartner.photoURL} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs uppercase">
+                        {activeChatPartner?.displayName?.substring(0, 2) || <MessageCircle className="w-5 h-5" />}
+                      </div>
+                    )}
+                  </>
                 )
               ) : (
                 (currentUserData?.photoURL || user?.photoURL) ? (
@@ -1096,13 +1137,35 @@ export default function App() {
                   </div>
                 )
               )}
+              {activeChat?.type !== 'group' && activeChatPartner?.isOnline && (
+                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-slate-900 shadow-xl"></div>
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-lg font-bold tracking-tight truncate text-white">
                 {activeChat ? (activeChat.type === 'group' ? activeChat.name : (activeChatPartner?.displayName || 'Trò chuyện')) : 'VibeChat'}
               </h2>
-              <div className="flex items-center gap-2 text-[9px] sm:text-[11px] text-slate-500 font-medium font-sans uppercase tracking-wider truncate">
-                {activeChat ? (activeChat.type === 'group' ? `${activeChat.members.length} thành viên` : (activeChatPartner?.email || 'Người dùng')) : 'Chọn một cuộc trò chuyện'}
+              <div className="flex items-center gap-2 text-[9px] sm:text-[11px] font-medium font-sans uppercase tracking-wider truncate">
+                {activeChat ? (
+                  activeChat.type === 'group' ? (
+                    <span className="text-slate-500">{activeChat.members.length} thành viên</span>
+                  ) : (
+                    activeChatPartner?.isOnline ? (
+                      <span className="text-green-400 flex items-center gap-1.5 ring-green-400/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        Đang hoạt động
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">
+                        {activeChatPartner?.lastSeen 
+                          ? `Đã hoạt động ${formatDistanceToNow(activeChatPartner.lastSeen.toDate(), { addSuffix: true, locale: vi })}`
+                          : 'Ngoại tuyến'}
+                      </span>
+                    )
+                  )
+                ) : (
+                  <span className="text-slate-500">Chọn một cuộc trò chuyện</span>
+                )}
               </div>
             </div>
           </div>
