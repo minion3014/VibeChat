@@ -1820,7 +1820,7 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
   const avatarUrl = sender?.photoURL || message.senderPhoto;
 
   const handleTouchStart = (e: React.PointerEvent) => {
-    if ((!isMe && !isAdmin) || isDeleted) return;
+    if (showMobileActions || (!isMe && !isAdmin) || isDeleted) return;
     
     setIsHolding(true);
     touchStartPos.current = { x: e.clientX, y: e.clientY };
@@ -1954,7 +1954,12 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
           {/* Mobile Context Menu for Deletion */}
           <AnimatePresence>
             {showMobileActions && (
-              <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-8 md:hidden">
+              <div 
+                className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-8 md:hidden"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onPointerMove={(e) => e.stopPropagation()}
+              >
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
