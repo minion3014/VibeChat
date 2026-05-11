@@ -1228,7 +1228,14 @@ export default function App() {
             ) : (
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} currentUserId={user.uid} onDelete={deleteMessage} allUsers={allUsers} />
+                  <MessageBubble 
+                    key={msg.id} 
+                    message={msg} 
+                    currentUserId={user.uid} 
+                    isAdmin={isAdmin}
+                    onDelete={deleteMessage} 
+                    allUsers={allUsers} 
+                  />
                 ))}
               </AnimatePresence>
             )}
@@ -1795,17 +1802,58 @@ interface MessageBubbleProps {
   key?: React.Key;
   message: Message;
   currentUserId: string;
+  isAdmin: boolean;
   allUsers: User[];
   onDelete: (id: string) => Promise<void> | void;
 }
 
-function MessageBubble({ message, currentUserId, onDelete, allUsers }: MessageBubbleProps) {
+function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: MessageBubbleProps) {
+  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
+  const longPressTimer = useRef<any>(null);
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
   const isMe = message.senderId === currentUserId;
   const time = message.createdAt ? format(message.createdAt.toDate(), 'HH:mm') : '';
   const isDeleted = message.isDeleted === true;
   const isSystem = message.type === 'system';
   const sender = allUsers.find(u => u.id === message.senderId);
   const avatarUrl = sender?.photoURL || message.senderPhoto;
+
+  const handleTouchStart = (e: React.PointerEvent) => {
+    if ((!isMe && !isAdmin) || isDeleted) return;
+    
+    setIsHolding(true);
+    touchStartPos.current = { x: e.clientX, y: e.clientY };
+    
+    longPressTimer.current = setTimeout(() => {
+      setShowMobileActions(true);
+      setIsHolding(false);
+      if ("vibrate" in navigator) {
+        navigator.vibrate(40);
+      }
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.PointerEvent) => {
+    if (!touchStartPos.current) return;
+    
+    const dist = Math.sqrt(
+      Math.pow(e.clientX - touchStartPos.current.x, 2) + 
+      Math.pow(e.clientY - touchStartPos.current.y, 2)
+    );
+    
+    if (dist > 10) {
+      handleTouchEnd();
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsHolding(false);
+    touchStartPos.current = null;
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+  };
 
   if (isSystem) {
     return (
@@ -1824,8 +1872,17 @@ function MessageBubble({ message, currentUserId, onDelete, allUsers }: MessageBu
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`flex items-end gap-2.5 max-w-[85%] sm:max-w-[70%] group ${isMe ? 'ml-auto flex-row-reverse' : 'flex-row'}`}
+      animate={{ 
+        opacity: 1, 
+        scale: isHolding ? 0.98 : 1, 
+        y: 0 
+      }}
+      transition={{ duration: 0.2 }}
+      onPointerDown={handleTouchStart}
+      onPointerUp={handleTouchEnd}
+      onPointerLeave={handleTouchEnd}
+      onPointerMove={handleTouchMove}
+      className={`flex items-end gap-2.5 max-w-[85%] sm:max-w-[70%] group touch-none select-none ${isMe ? 'ml-auto flex-row-reverse' : 'flex-row'}`}
     >
       <div className="flex-shrink-0 mb-1">
         {avatarUrl ? (
@@ -1877,12 +1934,62 @@ function MessageBubble({ message, currentUserId, onDelete, allUsers }: MessageBu
           {isMe && !isDeleted && (
             <button
               onClick={() => onDelete(message.id)}
-              className="absolute -left-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all duration-200"
+              className="absolute -left-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 hidden md:flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all duration-200"
               title="Xóa tin nhắn"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           )}
+
+          {isAdmin && !isMe && !isDeleted && (
+            <button
+              onClick={() => onDelete(message.id)}
+              className="absolute -right-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 hidden md:flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all duration-200"
+              title="Xóa tin nhắn (Admin)"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Mobile Context Menu for Deletion */}
+          <AnimatePresence>
+            {showMobileActions && (
+              <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-8 md:hidden">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowMobileActions(false)}
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                />
+                <motion.div
+                  initial={{ y: 100, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 100, opacity: 0 }}
+                  className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl overflow-hidden relative z-10 shadow-2xl"
+                >
+                  <button
+                    onClick={() => {
+                      onDelete(message.id);
+                      setShowMobileActions(false);
+                    }}
+                    className="w-full p-5 flex items-center justify-center gap-3 text-red-500 hover:bg-red-500/10 transition-all font-bold active:bg-red-500/20"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    <span>Xóa tin nhắn</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowMobileActions(false);
+                    }}
+                    className="w-full p-4 flex items-center justify-center text-slate-400 hover:bg-white/5 transition-all text-sm border-t border-white/5 font-medium"
+                  >
+                    Hủy bỏ
+                  </button>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>
