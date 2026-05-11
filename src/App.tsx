@@ -1809,6 +1809,8 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: MessageBubbleProps) {
   const [showMobileActions, setShowMobileActions] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [popoverPlacement, setPopoverPlacement] = useState<'top' | 'bottom'>('top');
   const isMe = message.senderId === currentUserId;
   const time = message.createdAt ? format(message.createdAt.toDate(), 'HH:mm') : '';
   const isDeleted = message.isDeleted === true;
@@ -1819,6 +1821,15 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
   const handleDoubleClick = (e: React.MouseEvent) => {
     if ((!isMe && !isAdmin) || isDeleted) return;
     e.preventDefault();
+    
+    // Determine placement based on position in viewport
+    if (bubbleRef.current) {
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      // If bubble is in the top 40% of the screen, show below. Otherwise show above.
+      setPopoverPlacement(rect.top < viewportHeight * 0.4 ? 'bottom' : 'top');
+    }
+    
     setShowMobileActions(true);
     if ("vibrate" in navigator) {
       navigator.vibrate(40);
@@ -1841,6 +1852,7 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
 
   return (
     <motion.div
+      ref={bubbleRef}
       initial={{ opacity: 0, scale: 0.95, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.2 }}
@@ -1919,14 +1931,14 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
             {showMobileActions && (
               <>
                 <div 
-                  className="fixed inset-0 z-[90] md:hidden"
-                  onClick={() => setShowMobileActions(false)}
+                  className="fixed inset-0 z-[90] md:hidden bg-black/10 backdrop-blur-[2px]"
+                  // User requested only closing via Hủy bỏ button
                 />
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  initial={{ opacity: 0, scale: 0.9, y: popoverPlacement === 'top' ? 10 : -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                  className={`absolute z-[100] min-w-[200px] bg-slate-900 border border-white/10 rounded-xl overflow-hidden shadow-2xl md:hidden ${isMe ? 'right-0' : 'left-0'} bottom-full mb-2`}
+                  exit={{ opacity: 0, scale: 0.9, y: popoverPlacement === 'top' ? 10 : -10 }}
+                  className={`absolute z-[100] min-w-[200px] bg-slate-900 border border-white/10 rounded-xl overflow-hidden shadow-2xl md:hidden ${isMe ? 'right-0' : 'left-0'} ${popoverPlacement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}`}
                 >
                   <button
                     onClick={(e) => {
@@ -1934,7 +1946,7 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
                       onDelete(message.id);
                       setShowMobileActions(false);
                     }}
-                    className="w-full py-3 px-4 flex items-center gap-3 text-red-500 hover:bg-red-500/10 transition-all font-bold active:bg-red-500/20"
+                    className="w-full py-4 px-4 flex items-center gap-3 text-red-500 hover:bg-red-500/10 transition-all font-bold active:bg-red-500/20"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span className="text-sm">Xóa tin nhắn</span>
@@ -1944,7 +1956,7 @@ function MessageBubble({ message, currentUserId, isAdmin, onDelete, allUsers }: 
                       e.stopPropagation();
                       setShowMobileActions(false);
                     }}
-                    className="w-full py-2.5 px-4 flex items-center justify-center text-slate-400 hover:bg-white/5 transition-all text-xs border-t border-white/5 font-medium"
+                    className="w-full py-3 px-4 flex items-center justify-center text-slate-400 hover:bg-white/5 transition-all text-xs border-t border-white/5 font-bold uppercase tracking-widest"
                   >
                     Hủy bỏ
                   </button>
