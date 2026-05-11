@@ -36,6 +36,7 @@ service cloud.firestore {
       return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
         && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1048576))
         && (data.email == null || (data.email is string && data.email.size() <= 100))
+        && (data.get('isOnline', null) == null || data.isOnline is bool)
         && (data.get('lastSeen', null) == null || data.lastSeen is timestamp)
         && (data.get('updatedAt', null) == null || data.updatedAt is timestamp);
     }
@@ -73,7 +74,7 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isVerified() && userId == request.auth.uid && isValidUser(incoming());
       allow update: if isVerified() && userId == request.auth.uid && isValidUser(incoming())
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastSeen', 'email', 'updatedAt']);
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastSeen', 'email', 'updatedAt', 'isOnline']);
     }
 
     // Chats: Rooms

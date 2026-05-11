@@ -35,6 +35,7 @@
         "displayName": { "type": "string", "description": "Display name" },
         "photoURL": { "type": "string", "description": "Avatar URL" },
         "lastSeen": { "type": "string", "format": "date-time", "description": "Last activity" },
+        "isOnline": { "type": "boolean", "description": "Whether the user is currently online" },
         "email": { "type": "string", "description": "User email" }
       },
       "required": ["displayName"]

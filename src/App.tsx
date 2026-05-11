@@ -165,6 +165,61 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // --- Presence Logic ---
+  useEffect(() => {
+    if (!user) return;
+
+    const userRef = doc(db, "users", user.uid);
+
+    // 1. Set online immediately on load/auth
+    const setOnline = async () => {
+      try {
+        await updateDoc(userRef, {
+          isOnline: true,
+          lastSeen: serverTimestamp()
+        });
+      } catch (e) {
+        // Fallback to setDoc if updateDoc fails (e.g. doc doesn't exist yet)
+        console.error("Presence update error:", e);
+      }
+    };
+
+    setOnline();
+
+    // 2. Heartbeat to keep status alive
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setOnline();
+      }
+    }, 30000);
+
+    // 3. Update when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setOnline();
+      }
+    };
+
+    // 4. Handle actual page close
+    const handleOffline = () => {
+      // Note: non-async call to try and complete before tab closes
+      updateDoc(userRef, {
+        isOnline: false,
+        lastSeen: serverTimestamp()
+      }).catch(e => console.error(e));
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleOffline);
+
+    return () => {
+      clearInterval(heartbeat);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleOffline);
+      // We DON'T call handleOffline here to avoid status flickering on component updates
+    };
+  }, [user?.uid]);
+
   // --- Auth State ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -186,8 +241,6 @@ export default function App() {
             isOnline: true
           };
 
-          // Only sync photoURL from auth if it's not empty, 
-          // or if firestore doesn't have one yet.
           if (currentUser.photoURL) {
             profileUpdates.photoURL = currentUser.photoURL;
           } else if (!userData?.photoURL) {
@@ -201,25 +254,8 @@ export default function App() {
       }
     });
 
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      const handleOffline = () => {
-        updateDoc(userRef, { 
-          isOnline: false, 
-          lastSeen: serverTimestamp() 
-        }).catch(e => console.error(e));
-      };
-      
-      window.addEventListener('beforeunload', handleOffline);
-      return () => {
-        window.removeEventListener('beforeunload', handleOffline);
-        handleOffline();
-        unsubscribe();
-      };
-    }
-
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, []);
 
   // --- Fetch Users ---
   useEffect(() => {
