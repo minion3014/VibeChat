@@ -714,7 +714,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#020408]">
+      <div className="flex items-center justify-center h-[100dvh] bg-[#020408]">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     );
@@ -722,7 +722,7 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#020408] p-4 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center h-[100dvh] bg-[#020408] p-4 relative overflow-hidden">
         {/* Background Atmosphere */}
         <div className="absolute inset-0">
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full bg-blue-600/10 blur-[120px]"></div>
@@ -1058,9 +1058,9 @@ export default function App() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 h-full min-h-0 flex flex-col z-10">
+      <div className="flex-1 h-full min-h-0 flex flex-col z-10 overflow-hidden relative">
         {/* Chat Header */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-white/[0.01] backdrop-blur-md relative z-40">
+        <header className="h-20 flex-shrink-0 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-white/[0.01] backdrop-blur-md relative z-40">
           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
             <button 
               onClick={() => setShowMobileSidebar(true)}
@@ -1243,7 +1243,7 @@ export default function App() {
         </div>
 
         {/* Message Input */}
-        <div className="p-4 sm:p-6 md:p-8 bg-white/[0.02] border-t border-white/5 backdrop-blur-xl">
+        <div className="flex-shrink-0 p-4 sm:p-6 md:p-8 bg-white/[0.02] border-t border-white/5 backdrop-blur-xl">
           <form 
             onSubmit={sendMessage}
             className="w-full max-w-4xl mx-auto relative flex items-center gap-2 sm:gap-4"
