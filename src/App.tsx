@@ -756,19 +756,19 @@ export default function App() {
                   required
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-base focus:outline-none focus:border-blue-500/50 transition-all text-white"
                 />
               </div>
             )}
             <div className="relative">
-              <input
-                type="email"
-                placeholder="Email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
-              />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-base focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                  />
             </div>
             <div className="relative">
               <input
@@ -777,7 +777,7 @@ export default function App() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-base focus:outline-none focus:border-blue-500/50 transition-all text-white"
               />
               <button
                 type="button"
@@ -790,15 +790,15 @@ export default function App() {
 
             {isRegistering && (
               <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Nhập lại mật khẩu"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
-                />
-                <button
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Nhập lại mật khẩu"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-base focus:outline-none focus:border-blue-500/50 transition-all text-white"
+              />
+              <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/5 rounded-lg text-slate-500 hover:text-slate-300 transition-all"
@@ -887,7 +887,7 @@ export default function App() {
               placeholder="Tìm bạn bè hoặc Email..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-white"
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-base focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 text-white"
             />
           </div>
 
@@ -1255,7 +1255,7 @@ export default function App() {
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder={activeChatId ? "Nhập tin nhắn..." : "Vui lòng chọn chat"}
                 disabled={!activeChatId}
-                className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl px-6 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-slate-200 placeholder:text-slate-600 disabled:opacity-40 backdrop-blur-md shadow-inner"
+                className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl px-6 text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-slate-200 placeholder:text-slate-600 disabled:opacity-40 backdrop-blur-md shadow-inner"
               />
             </div>
             
@@ -1291,13 +1291,13 @@ export default function App() {
               <div className="p-6 space-y-4">
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-600 tracking-widest block mb-2">Tên nhóm</label>
-                  <input 
-                    type="text" 
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                    placeholder="Tên nhóm của bạn..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500/50 text-white"
-                  />
+                    <input 
+                      type="text" 
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      placeholder="Tên nhóm của bạn..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-base focus:outline-none focus:border-blue-500/50 text-white"
+                    />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-600 tracking-widest block mb-2">Thành viên ({selectedUsers.length})</label>
@@ -1309,7 +1309,7 @@ export default function App() {
                         placeholder="Tìm bạn bè để thêm..." 
                         value={groupSearchQuery}
                         onChange={(e) => setGroupSearchQuery(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-4 text-xs focus:outline-none focus:border-blue-500/50 text-white transition-all"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-4 text-base focus:outline-none focus:border-blue-500/50 text-white transition-all"
                       />
                     </div>
                   </div>
@@ -1452,7 +1452,7 @@ export default function App() {
                         type="text" 
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white placeholder:text-slate-600"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-base focus:outline-none focus:border-blue-500/50 transition-all text-white placeholder:text-slate-600"
                         placeholder="Nhập tên của bạn..."
                       />
                       <Edit2 className="w-4 h-4 text-slate-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1520,7 +1520,7 @@ export default function App() {
                         type="text" 
                         value={editGroupName}
                         onChange={(e) => setEditGroupName(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-sm focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-600"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-5 text-base focus:outline-none focus:border-indigo-500/50 transition-all text-white placeholder:text-slate-600"
                         placeholder="Nhập tên nhóm..."
                       />
                       <Edit2 className="w-4 h-4 text-slate-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1735,7 +1735,7 @@ function AddMemberModal({ show, onClose, currentMembers, allUsers, onAddMembers 
                   placeholder="Tìm thành viên..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600 text-white"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-base focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600 text-white"
                 />
               </div>
 
